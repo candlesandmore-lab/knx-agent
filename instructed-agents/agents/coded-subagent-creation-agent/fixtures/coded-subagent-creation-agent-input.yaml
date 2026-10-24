@@ -1,0 +1,28 @@
+# Copyright (c) 2026 agent-building-agent contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Source: https://TBD (training course)
+
+# Template fixture: edit the values below to try coded-subagent-creation-agent against your
+# own coded-agent capability idea. coded-subagent-creation-agent is an instructed agent, so
+# unlike the four coded agents' CLI-fed fixtures, this file is not read by an automated
+# pytest run. It seeds a prompt-flow check instead: paste these fields as the task input
+# when invoking coded-subagent-creation-agent (directly, or via agent-dev-agent's
+# delegation), then have a developer or the review-validation/QA agents confirm the agent
+# follows the coded-subagent-creation skill's routing and handoff rules before treating the
+# check as passed.
+
+# Required. A plain-language description of the coded-agent capability to generate.
+capability_description: >-
+  A coded sub-agent that classifies incoming support tickets into a fixed set of categories
+  using a refine/evaluator loop, with no frontier-model reasoning required.
+
+# Required. The kebab-case slug the generated coded-agent implementation must be created
+# under, e.g. src/<package_name>/coded_agents/<target_agent_slug>/.
+target_agent_slug: ticket-classifier-agent
+
+# Required. The resolved solution_surface value from the story's task plan. One of:
+# coded_agent, hybrid_agent. (instructed_agent_only stories never reach this agent.)
+solution_surface: coded_agent
+
+# Optional. Active story context (or any dict) given as background for the generation.
+active_story: {}

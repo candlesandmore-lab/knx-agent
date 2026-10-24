@@ -1,0 +1,6 @@
+# Todo 06: Environment model, user actions, scenario state
+Source: use cases 2 and 3, implementation 002 (Slice 5), 001 (scenario/environment facts)
+Goal: session-scoped, resettable scenario state; environment model (sensor-oriented inputs, KNX datatype normalisation, last-come-wins); user-action injection that resolves a human action (e.g. press a wall switch) to group address/value or returns candidates for clarification. Capabilities: list/set/get environment value, inject_user_action, resolve_user_action_candidates, inject_event, reset_scenario. Scenario parsing stays separate from simulation rules.
+Answered: the .knxproj holds no sensor values; values live in KNX system state, set by user override or trace. Sensors are addressed by NAME (found via todo 04/14); scope = the actual sensor, and the effect must ripple down to the components that read its group address; units normalised to ETS/KNX datapoint types; last-come-wins across user input and trace; environment model = primary inputs, KNX system state = simulated result. Gestures (long press, dimming, double press, scenes) only where configured in the knxproj; unresolvable action = error; every input goes to the session log book. Mapping human phrases to telegrams is the agent layer (todo 11).
+Open: is environment/state per mutation or per session (see todo 01).
+Depends on: 03, 04

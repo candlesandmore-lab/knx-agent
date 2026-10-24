@@ -1,0 +1,30 @@
+# Copyright (c) 2026 agent-building-agent contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Source: https://TBD (training course)
+
+story_task_plan:
+  ordered_tasks: []
+  parallelizable_tasks: []
+  prerequisite_artifacts: []
+  review_checkpoints: []
+  completion_conditions: []
+  # One of: instructed_agent_only, coded_agent, hybrid_agent. Required; a missing or
+  # contradictory value blocks progression to implementation-task definition.
+  solution_surface: null
+  # Always instructed; the top-level agent is never reclassified as coded.
+  top_level_runtime: instructed
+  subagent_topology: []
+  phase_owners: []
+  # Per-surface generated/omitted status for sdk, cli, and mcp whenever python-creation-agent
+  # generates a shared core Python layer. Required for every such layer; an omitted surface
+  # must carry a reviewed rationale. An unrecorded gap is a blocking review finding.
+  invocation_surfaces:
+    sdk:
+      status: null # one of: generated, omitted
+      rationale: null # required when status is omitted
+    cli:
+      status: null # one of: generated, omitted
+      rationale: null # required when status is omitted
+    mcp:
+      status: null # one of: generated, omitted
+      rationale: null # required when status is omitted

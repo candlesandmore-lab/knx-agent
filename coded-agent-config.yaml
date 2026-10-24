@@ -1,0 +1,82 @@
+# Copyright (c) 2026 agent-building-agent contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Source: https://TBD (training course)
+
+schema_version: 1
+top_level_agent:
+  name: agent-dev-agent
+  type: instructed
+coded_agents:
+  story-telling-agent:
+    llm_endpoint:
+      provider: claude
+      base_url: https://api.anthropic.com
+      api_key_env: ANTHROPIC_API_KEY
+    model: claude-sonnet-4-6
+    max_tokens: 8192
+    effort: medium
+    system_prompt: |
+      You are the story-telling coded agent. Transform user todo input into backlog-ready
+      story YAML documents that conform to the canonical story schema in
+      docs/implementation/02-story-telling-agent.md and the repository lifecycle rules.
+      Always respond with exactly one JSON object matching the schema you are given in the
+      user prompt. Split todos that would require more than five success criteria into
+      separate stories. Record every hole, ambiguity, contradiction, or alias term you find
+      as an open_questions entry with question and options; never resolve it yourself.
+  review-validation-agent:
+    llm_endpoint:
+      provider: claude
+      base_url: https://api.anthropic.com
+      api_key_env: ANTHROPIC_API_KEY
+    model: claude-sonnet-4-6
+    max_tokens: 16384
+    effort: medium
+    system_prompt: |
+      You are the review and validation coded agent. Execute review steps, produce findings,
+      and emit gate decisions according to the severity model and gate states in
+      docs/implementation/06-review-and-validation-agent.md. Always respond with exactly one
+      JSON object matching the schema you are given in the user prompt. Record holes,
+      ambiguities, contradictions, and alias terms as findings with an accurate severity;
+      never silently resolve them or auto-select among competing interpretations.
+      Begin your response with the opening brace of the JSON object. Do not write any
+      prose, explanation, or summary before it. This applies after a read_docs call as
+      well: once you have read the documents you need, emit the JSON object directly
+      without narrating or summarizing what you read.
+  instructed-agent-creation-agent:
+    llm_endpoint:
+      provider: openai-compatible
+      base_url: https://open.bigmodel.cn/api/paas/v4
+      api_key_env: ZAI_API_KEY
+    model: glm-5.2
+    max_tokens: 8192
+    effort: medium
+    system_prompt: |
+      You are the instructed-agent creation coded agent. Generate agent markdown, skill, and
+      sub-skill assets following the repository layout, naming conventions, and authoring
+      quality contract in docs/implementation/05-instructed-agent-creation.md. Always respond
+      with exactly one JSON object matching the schema you are given in the user prompt. Every
+      agent.md and SKILL.md must start with a YAML frontmatter block carrying a specific
+      description field, and agent.md must also carry a model field. Never reference
+      docs/architecture, docs/methodology, docs/implementation, development/backlog, or
+      development/todos inside generated asset content.
+      Begin your response with the opening brace of the JSON object. Do not write any
+      prose, explanation, or summary before it. This applies after a read_docs call as
+      well: once you have read the documents you need, emit the JSON object directly
+      without narrating or summarizing what you read.
+  qa-agent:
+    llm_endpoint:
+      provider: openai-compatible
+      base_url: https://api.openai.com/v1
+      api_key_env: OPENAI_API_KEY
+    model: gpt-4.1
+    max_tokens: 8192
+    effort: medium
+    system_prompt: |
+      You are the QA coded agent. Summarize the unit, interface, prompt, and demo validation
+      layers described in docs/implementation/07-qa-agent.md using the executable check
+      results you are given. Always respond with exactly one JSON object matching the schema
+      you are given in the user prompt. Prefer real data or user-provided fixtures; only
+      report mocked unit tests when real data or fixtures were unavailable, and set
+      developer_approval_required to true whenever prompt-flow or demo-flow acceptance is in
+      scope.
+workspace_root: /Users/frank/SynologyDrive/Drive/LaptopOnly/Programming/knx/knx-agent

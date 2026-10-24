@@ -1,0 +1,124 @@
+# Copyright (c) 2026 agent-building-agent contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Source: https://TBD (training course)
+
+schema:
+  name: coded-agent-config
+  version: 1
+  description: >
+    Runtime configuration schema for coded agents. One YAML configuration file
+    for the top-level agent with a section per coded sub-agent carrying LLM
+    endpoint, model name, and user-reviewable system prompt.
+  top_level_keys:
+    - schema_version
+    - top_level_agent
+    - coded_agents
+  optional_top_level_keys:
+    - workspace_root
+  workspace_root:
+    description: >
+      Guardrail root for every coded agent's read_docs tool, added by
+      install_instructed_agents and set to the resolved installed-workspace path. Falls back
+      to the current working directory when absent (for example the source repository's own
+      coded-agent-config.yaml). Confines read_docs to paths inside this root, covering both
+      the packaged docs/ tree inside .venv/site-packages/agent_building_agent/docs/ and the
+      installed workspace's own files.
+  coded_agents_required_fields:
+    - llm_endpoint
+    - model
+    - system_prompt
+    - effort
+  coded_agents_optional_fields:
+    - max_tokens
+  llm_endpoint_required_fields:
+    - provider
+    - base_url
+    - api_key_env
+  max_tokens:
+    description: >
+      Maximum output tokens for each chat-completion call for this coded agent. Must be
+      sized for the agent's structured output so the provider does not truncate the
+      response mid-JSON. Defaults to 8192. Set higher (for example 16384) for agents that
+      emit large findings sets. When a provider returns stop_reason=max_tokens, the coded
+      agent runtime surfaces it as an explicit truncation feedback signal so the refine
+      loop can ask for a more compact payload instead of failing with a confusing JSON
+      syntax error. When the provider is Claude and max_tokens exceeds the Anthropic SDK's
+      non-streaming timeout threshold (21333, computed from the SDK's formula
+      `max_tokens > 600 * 128_000 / 3600`), the Claude chat-completion client
+      automatically switches to streaming and aggregates the response so the call does not
+      raise "Streaming is required for operations that may take longer than 10 minutes"; at
+      or below the threshold the non-streaming path is used. No new configuration field is
+      added — the user just sets max_tokens and the client decides streaming vs
+      non-streaming transparently. The OpenAI-compatible provider does not need this
+      guardrail because the OpenAI SDK does not impose an equivalent non-streaming timeout
+      tied to max_tokens.
+  effort:
+    description: >
+      Reasoning-depth control for chat-completion calls; one of low, medium, high, xhigh,
+      max. Required (unlike max_tokens): install/merge bootstraps a missing config with
+      medium so a freshly created or merged config is never missing it, but a hand-edited
+      config that omits this field fails validation, and an already-set value is never
+      overwritten. Forwarded as the Claude provider's output_config.effort parameter on
+      every chat-completion call. Not yet forwarded for the openai-compatible provider.
+  constraints:
+    - The top-level agent is always an instructed agent; this configuration file only configures coded sub-agents.
+    - All coded agents use the same uniform SDK base class (ClaudeCode SDK, Anthropic-native).
+    - Each coded-agent section must carry an LLM endpoint supporting Claude and OpenAI-compatible chat-completion APIs.
+    - Each coded-agent section may set `max_tokens` to size the output limit for its structured payload; when omitted the default of 8192 applies.
+    - Each coded-agent section must set `effort` to one of low/medium/high/xhigh/max; install/merge bootstraps a missing value to `medium`, but a hand-edited config that omits it fails validation.
+    - The calling agent must provide a task id with each call to a coded agent; the coded agent persists state keyed by that task id.
+    - The coded-agent internal loop runs at most five iterations; after five unsuccessful iterations it returns a failure contract with questions for the calling agent.
+    - Coded-agent code lives under `src`.
+    - Coded agents must produce file logs for debug-ability.
+    - A coded agent must size `max_tokens` for its structured output and must handle provider truncation (stop_reason=max_tokens) as an explicit feedback signal, not as a generic JSON syntax error.
+example:
+  schema_version: 1
+  top_level_agent:
+    name: agent-dev-agent
+    type: instructed
+  workspace_root: /path/to/installed/workspace
+  coded_agents:
+    story-telling-agent:
+      llm_endpoint:
+        provider: openai-compatible
+        base_url: https://api.openai.com/v1
+        api_key_env: OPENAI_API_KEY
+      model: gpt-4.1
+      effort: medium
+      system_prompt: |
+        You are the story-telling coded agent. Transform user todo input into
+        backlog-ready story YAML documents that conform to the canonical story
+        schema and repository lifecycle rules.
+    review-validation-agent:
+      llm_endpoint:
+        provider: claude
+        base_url: https://api.anthropic.com
+        api_key_env: ANTHROPIC_API_KEY
+      model: claude-sonnet-4-6
+      effort: medium
+      system_prompt: |
+        You are the review and validation coded agent. Execute review steps,
+        produce findings, and emit gate decisions according to the severity
+        model and gate states.
+    instructed-agent-creation-agent:
+      llm_endpoint:
+        provider: openai-compatible
+        base_url: https://open.bigmodel.cn/api/paas/v4
+        api_key_env: ZAI_API_KEY
+      model: glm-5.2
+      effort: medium
+      system_prompt: |
+        You are the instructed-agent creation coded agent. Generate agent
+        markdown, skill, and sub-skill assets following the repository layout,
+        naming conventions, and authoring quality contract.
+    qa-agent:
+      llm_endpoint:
+        provider: openai-compatible
+        base_url: https://api.openai.com/v1
+        api_key_env: OPENAI_API_KEY
+      model: gpt-4.1
+      effort: medium
+      system_prompt: |
+        You are the QA coded agent. Run unit, interface, prompt, and demo
+        validation layers, apply the fixture policy, and produce validation
+        outputs with developer approval boundaries.

@@ -1,0 +1,53 @@
+# Copyright (c) 2026 agent-building-agent contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Source: https://TBD (training course)
+
+schema:
+  name: story
+  version: 1
+  required_top_level_keys:
+    - schema_version
+    - story
+  story_required_fields:
+    - id
+    - title
+    - state
+    - created_on
+    - last_updated_on
+    - source_todo
+    - actor
+    - goal
+    - success_criteria
+    - architecture_options
+    - implementation_options
+    - repository_context
+    - current_implementation
+    - guidelines
+    - impact_analysis
+    - shipped_asset_alignment
+    - development_cycle
+    - open_questions
+  lifecycle_states:
+    - open
+    - active
+    - implemented
+  open_question_required_fields:
+    - question
+    - options
+  shipped_asset_alignment_required_fields:
+    - asset
+    - decision
+    - rationale
+    - follow_up_story_id
+  shipped_asset_alignment_decision_values:
+    - updated
+    - not_applicable
+    - deferred
+  constraints:
+    - A story should normally contain no more than five success criteria.
+    - Story ids are assigned by scanning all backlog lifecycle folders and incrementing the highest numeric prefix.
+    - Each `open_questions` entry must include `question` and `options`. An empty list is valid when no open questions remain.
+    - Use one canonical term per concept inside a story. Synonyms and alias terms are treated as review findings.
+    - Do not auto-select among design or implementation options. Record them in `open_questions` and ask the user.
+    - Each `shipped_asset_alignment` entry must include `asset`, `decision`, `rationale`, and `follow_up_story_id`. An empty list is valid only when `impact_analysis` marks both `architecture` and `implementation` as unchanged.
+    - "A `shipped_asset_alignment` entry with `decision: deferred` must set `follow_up_story_id` to a concrete backlog story or todo identifier; a prose-only mention elsewhere in the story is not sufficient."

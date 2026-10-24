@@ -1,0 +1,19 @@
+# Copyright (c) 2026 agent-building-agent contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Source: https://TBD (training course)
+
+schema:
+  name: review_finding
+  version: 1
+  required_fields:
+    - severity
+    - finding
+    - evidence
+    - impact
+    - recommended_resolution
+    - defer_allowed
+  severity_values:
+    - blocking
+    - important
+    - info
+    - minor
