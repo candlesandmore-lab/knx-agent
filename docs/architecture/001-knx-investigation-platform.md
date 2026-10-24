@@ -107,7 +107,7 @@ flowchart LR
 - The SDK-facing callable core API is the canonical execution surface. CLI and MCP are adapters over it.
 - Session creation, session selection, and session inspection are mandatory capabilities on all three tool surfaces.
 - The CLI adapter should be implemented with the `typer` package.
-- The MCP adapter should be implemented with the `mcp` package using FastMCP.
+- The MCP adapter should be implemented with the `mcp` package using its `MCPServer` (called FastMCP in mcp 1.x; renamed in mcp 2.x).
 
 ### 2b. Session service
 

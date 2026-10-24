@@ -94,6 +94,7 @@ consultation instructions before making a terminology or naming decision.
 | set_parameter_override | `set_parameter_override` | Capability: sets a component parameter in a mutation. |
 | list_mutations | `list_mutations` | Capability: lists mutations with details. Replaces `describe_mutation`. |
 | fetch_component_details | `fetch_component_details` | Capability: fetches vendor or catalogue information including behavior hints. Replaces `extract_behavior_hints`. |
+| KnxSessionClient | `KnxSessionClient` | The SDK entry-point class in `knx_agent.sdk`; exposes catalogue capabilities as methods (`client.<capability>(...)`) and delegates to the shared Python core. Not `KnxClient`. |
 | Reviewed draft | Reviewed draft | Document status of a catalogue or specification that passed review but is not yet frozen; it becomes frozen only when its stated freeze condition is met (for the capability catalogue: todo 13 end-to-end validation passes). Changes after freezing need a catalogue update plus a review cycle. |
 | Limitation note | Limitation note | An explicit statement in a result or document that describes unsupported behavior, ambiguity, missing evidence, or partial coverage. |
 

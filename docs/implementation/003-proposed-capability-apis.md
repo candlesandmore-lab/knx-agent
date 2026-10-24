@@ -19,13 +19,13 @@ SDK method names and the log-level spelling were confirmed by the user. Capabili
 ## Purpose and layer model
 
 One callable core API is projected identically onto the Python SDK, the `typer` CLI, the `mcp`
-FastMCP tool surface, and consumed by the agent layer.
+`MCPServer` tool surface, and consumed by the agent layer.
 
 - Shared Python core (the callable core API): below the SDK, above storage/parsing adapters. Owns request validation,
   session and setup resolution, business logic, result assembly, evidence sources and limitation
   notes. Primary pytest target; any Python in this layer lands with direct pytest coverage.
 - SDK: the callable core API as stable Python methods and data models; canonical programmable surface.
-- CLI (`typer`) and MCP (`mcp` FastMCP): thin adapters converting arguments or tool inputs into SDK
+- CLI (`typer`) and MCP (`mcp` package, `MCPServer`): thin adapters converting arguments or tool inputs into SDK
   requests; no business rules.
 - Agent layer: accepts natural language, resolves it into deterministic capability calls, never
   guesses unresolved identifiers or meanings, asks the human to clarify. Out of the core catalogue:
@@ -338,10 +338,35 @@ is still valid and not captured by the architecture or the dictionary:
   `current_system_state` reference and log-book references; artifacts are referenced from the state
   file, not found by directory scanning; mutations persist as deltas in mutation files.
 - Layering: `domain/` and `application/` hold the callable core API, `sdk/` re-exports it, `cli/`
-  (`typer`) and `adapters/mcp/` (FastMCP) bind to SDK operations, `agent_layer/` packages prompts and
+  (`typer`) and `adapters/mcp/` (`MCPServer`) bind to SDK operations, `agent_layer/` packages prompts and
   skills; every new Python module lands with pytest coverage; SDK-first tests precede adapter tests.
   Concrete package skeleton: `development/todos/02-package-skeleton-and-core-api.md`.
-- Dependencies: `typer` for CLI, `mcp` FastMCP for MCP; every dependency needs a recorded free-to-use
+  Firm package-layout note (story 02, decided):
+  - One uv-managed project (single `pyproject.toml`, `src` layout), importable package `knx_agent` under `src/knx_agent/`.
+    Layer boundaries are enforced by an import-direction test, not by the build.
+  - Sub-packages (each a plain Python package):
+    - `domain`: pure domain concepts and rules; no I/O, no framework imports.
+    - `application`: the callable core API (capability functions: request validation, resolution, result assembly); depends on `domain` and `contracts`.
+    - `adapters`: outward-facing bindings and (later) storage/parsing adapters; `adapters/mcp` holds the `MCPServer` tool adapter. Adapters call the SDK only.
+    - `sdk`: the canonical programmable surface (`client.<capability>(...)`); re-exports and wraps `application`.
+    - `cli`: the `typer` app (entry point `knx-agent`); calls the SDK only.
+    - `agent_layer`: placeholder for prompts and skills (todo 11); no runtime code yet.
+    - `contracts`: Pydantic v2 request/response/envelope/error models; shared by all layers, imports nothing from `knx_agent`.
+  - Import direction rule: `cli` and `adapters` (incl. `adapters/mcp`) -> `sdk` -> `application` -> `domain`; `contracts`
+    is importable by every layer and imports no other `knx_agent` sub-package; no inner layer imports an outer layer;
+    `cli` and `adapters` never import `application` or `domain` directly; `agent_layer` may import `sdk` and `contracts` only.
+  - Envelope models (Pydantic v2, `knx_agent.contracts`) implement C7 without adding fields:
+    - `EvidenceSource`: `kind` (enum `KNXPROJ`, `TRACE`, `USER_INPUT`, `VENDOR_DOCUMENTATION`, `SIMULATION_RULE`) and `reference` (string).
+    - `ResponseEnvelope`: `setup` (string; optional because `fetch_component_details` omits it), `evidence_sources` (list of `EvidenceSource`, possibly empty),
+      `limitation_notes` (list of strings, possibly empty, never null), `log_book_entry_id` (optional), `detail_level` (optional, enum `SUMMARY`, `MEDIUM`, `FULL`; set only on descriptive calls).
+      Capability response models embed or inherit the envelope.
+    - `ErrorInfo`: `code` (string; codes remain proposals per C7), `message` (string), `details` (optional). Core failures are raised as one SDK exception carrying `ErrorInfo`; adapters map it to their surface unchanged.
+  - Skeleton callable (story 02): `describe_session(session_label)` (catalogue capability 3) with a clearly marked placeholder body that returns the envelope and a limitation note
+    stating that the session service is not implemented yet (todo 03). No other capability is wired by the skeleton; wiring all capabilities is todo 10.
+  - Testing strategy: pytest from the repository root; SDK-first (core API and SDK tests call the SDK directly, without CLI or MCP), then adapter delegation tests
+    (core/SDK callable mocked; inputs and outputs pass through unchanged and no domain logic exists in the adapter), model validation tests (envelope and error shape,
+    evidence kinds), one import test per sub-package, and an import-direction test that parses module imports (AST) and fails on any inward-rule violation.
+- Dependencies: `typer` for CLI, `mcp` (`MCPServer`; called FastMCP in mcp 1.x, renamed in mcp 2.x, pinned `mcp>=2,<3`) for MCP; every dependency needs a recorded free-to-use
   license review (`development/todos/12-dependency-license-governance.md`).
 - Validation expectations carried forward: SDK, CLI and MCP return compatible structured results;
   every response includes evidence sources and limitation notes; session resume from the work-directory;

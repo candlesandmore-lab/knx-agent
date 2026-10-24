@@ -1,0 +1,36 @@
+# Data-driven cases for the describe_session capability.
+# Edit or add entries here; tests parametrize from this file (see tests/conftest.py).
+#
+# valid:   session_label accepted; expectations are checked against the response.
+# invalid: session_label rejected with a KnxAgentError carrying expected_error_code.
+
+valid:
+  - id: simple-label
+    session_label: "x"
+    expected_setup: "default"
+    expected_active_setup: "default"
+    expected_evidence_sources: []
+    expected_limitation_note_contains: "not implemented yet"
+  - id: realistic-label
+    session_label: "lab-session-2026-10-24"
+    expected_setup: "default"
+    expected_active_setup: "default"
+    expected_evidence_sources: []
+    expected_limitation_note_contains: "placeholder"
+  - id: label-with-inner-spaces
+    session_label: "my session"
+    expected_setup: "default"
+    expected_active_setup: "default"
+    expected_evidence_sources: []
+    expected_limitation_note_contains: "todo 03"
+
+invalid:
+  - id: empty
+    session_label: ""
+    expected_error_code: "INVALID_REQUEST"
+  - id: whitespace-spaces
+    session_label: "   "
+    expected_error_code: "INVALID_REQUEST"
+  - id: whitespace-tab-newline
+    session_label: "\t\n"
+    expected_error_code: "INVALID_REQUEST"

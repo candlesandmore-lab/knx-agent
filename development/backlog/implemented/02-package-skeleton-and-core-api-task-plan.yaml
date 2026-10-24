@@ -1,0 +1,95 @@
+# Copyright (c) 2026 agent-building-agent contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Source: https://TBD (training course)
+
+story_task_plan:
+  story: "development/backlog/active/02-package-skeleton-and-core-api.yaml"
+  spec_reference: "docs/implementation/003-proposed-capability-apis.md (Appendix, Layering: firm package-layout note)"
+  ordered_tasks:
+    - id: T1
+      owner: python-creation-agent
+      title: "uv project and pytest scaffolding"
+      description: "Create pyproject.toml (uv-managed, src layout, build backend with packages under src/knx_agent, requires-python >=3.11, dependencies pydantic>=2, typer, mcp; dev group pytest; [tool.pytest.ini_options] testpaths=tests, pythonpath handled by the installed package; console script knx-agent -> knx_agent.cli). Create tests/ directory. Run uv sync through the MCP execution surface."
+      done_when: "uv sync succeeds on a clean checkout and import knx_agent works."
+    - id: T2
+      owner: python-creation-agent
+      title: "Seven sub-packages"
+      description: "Create src/knx_agent/__init__.py and sub-packages domain, application, adapters (with adapters/mcp), sdk, cli, agent_layer (empty placeholder, docstring only), contracts, each with __init__.py and a one-line module docstring. No logic beyond what T3-T6 add."
+      depends_on: [T1]
+      done_when: "All sub-packages including knx_agent.adapters.mcp import without error."
+    - id: T3
+      owner: python-creation-agent
+      title: "Contracts: Pydantic v2 envelope and error models"
+      description: "In knx_agent.contracts add EvidenceSource (kind enum KNXPROJ|TRACE|USER_INPUT|VENDOR_DOCUMENTATION|SIMULATION_RULE, reference str), DetailLevel enum (SUMMARY|MEDIUM|FULL), ResponseEnvelope (setup optional str, evidence_sources list default empty, limitation_notes list default empty, log_book_entry_id optional, detail_level optional), ErrorInfo (code, message, details optional). Add DescribeSessionRequest/Response models per catalogue capability 3 limited to the fields the placeholder can honestly fill (session_label, active_setup='default', envelope). contracts imports nothing from knx_agent."
+      depends_on: [T2]
+      done_when: "Models validate, reject unknown evidence kinds, serialise to JSON and expose JSON schema."
+    - id: T4
+      owner: python-creation-agent
+      title: "Core API callable: describe_session (placeholder body)"
+      description: "In knx_agent.application implement describe_session(session_label) returning the T3 response with setup 'default', evidence_sources empty list, and a limitation note stating the session service is not implemented yet (todo 03). Clearly mark the body as placeholder in a comment and docstring. A blank session_label raises the single SDK-facing exception carrying ErrorInfo(code INVALID_REQUEST). Define that exception in contracts (or application) without importing outer layers. Add no new capability names."
+      depends_on: [T3]
+      done_when: "Callable returns the envelope with limitation_notes non-empty; blank label yields ErrorInfo INVALID_REQUEST."
+    - id: T5
+      owner: python-creation-agent
+      title: "SDK client exposure"
+      description: "In knx_agent.sdk expose a client class (name: KnxSessionClient) with method describe_session(session_label=...) delegating to application; export from knx_agent.sdk. No logic beyond delegation."
+      depends_on: [T4]
+      done_when: "KnxSessionClient().describe_session(session_label='x') returns the response model."
+    - id: T6
+      owner: python-creation-agent
+      title: "Typer CLI stub and MCPServer stub"
+      description: "knx_agent.cli: typer app with command group 'session' and command 'describe --session <session_label>' (catalogue projection of describe_session), printing the response model as JSON; console script knx-agent. knx_agent.adapters.mcp: MCPServer-based server (mcp 2.x; formerly FastMCP) with tool named describe_session taking session_label and returning the response model. Both import only knx_agent.sdk (and contracts) and call KnxSessionClient.describe_session; no domain logic, no error rewriting beyond mapping the SDK exception to the surface's error mechanism."
+      depends_on: [T5]
+      done_when: "knx-agent session describe --session x prints JSON; the MCP tool is registered under the name describe_session."
+    - id: T7
+      owner: python-creation-agent
+      title: "Pytest tests for the five success-criteria areas"
+      description: "tests/: (a) one import test per sub-package (seven, including adapters.mcp) ; (b) SDK-first tests calling KnxSessionClient.describe_session directly, including the blank-label error; (c) contracts tests asserting evidence_sources kinds and shape, limitation_notes (possibly empty, non-null), optional log_book_entry_id and detail_level, ErrorInfo shape, and a core-callable test asserting evidence_sources and limitation_notes of the placeholder response; (d) adapter delegation tests for CLI (typer CliRunner) and MCP that monkeypatch the SDK method and assert inputs and outputs pass through unchanged; (e) import-direction test that walks src/knx_agent with ast and fails on any import violating cli/adapters -> sdk -> application -> domain, contracts-imports-nothing, and no cli/adapters import of application or domain."
+      depends_on: [T6]
+      done_when: "pytest from the repository root discovers and passes all tests, at least one per sub-package."
+    - id: T8
+      owner: qa-agent
+      title: "Executable validation"
+      description: "Run uv sync and full pytest through the MCP execution tools; check the story success criteria one by one; fill coverage gaps."
+      depends_on: [T7]
+      done_when: "All six success criteria have passing evidence."
+  parallelizable_tasks:
+    - "Not safe to parallelise the core chain: T1 -> T2 -> T3 -> T4 -> T5 -> T6 each import or depend on the previous output (single pyproject, shared package tree)."
+    - "Limited safe parallelism once T5 is done: the CLI half and the MCP half of T6 touch disjoint files, and the contracts tests, SDK tests and import-direction test of T7 can be written alongside their targets. The saving is small, so run sequentially by default."
+  prerequisite_artifacts:
+    - "docs/implementation/003-proposed-capability-apis.md (C7 envelope, capability 3 describe_session, layering note)"
+    - "docs/methodology/02-terminology-dictionary.md"
+    - "development/backlog/active/02-package-skeleton-and-core-api.yaml"
+    - "uv available in the execution environment"
+  review_checkpoints:
+    - "After T3: envelope and error models match C7 exactly (no extra or renamed fields)."
+    - "After T6: adapters contain no domain logic and import only sdk and contracts."
+    - "After T7/T8: consolidated review gate by review-validation-agent against the six success criteria."
+  completion_conditions:
+    - "uv sync works on a clean clone; knx_agent and all seven sub-packages import."
+    - "pytest from the repository root passes with at least one test per sub-package."
+    - "describe_session is reachable via knx_agent.sdk and tested without CLI or MCP."
+    - "Tests assert evidence_sources and limitation_notes and the error shape."
+    - "CLI and MCP delegation verified with the SDK mocked."
+    - "Import-direction test passes."
+    - "All Python, pytest, YAML-validation and git operations ran through the MCP execution tools."
+  solution_surface: instructed_agent_only
+  top_level_runtime: instructed
+  subagent_topology:
+    - "instructed_agent_only: no coded sub-agent; the Python package is the product core built by python-creation-agent; agent_layer is an empty placeholder until todo 11."
+  phase_owners:
+    story_drafting: story-telling-agent
+    architecture_implementation_spec_and_task_plan: architect-planning-agent
+    python_implementation: python-creation-agent
+    review_gates: review-validation-agent
+    executable_validation: qa-agent
+  invocation_surfaces:
+    sdk:
+      status: generated
+      rationale: null
+    cli:
+      status: generated
+      rationale: null
+    mcp:
+      status: generated
+      rationale: null

@@ -1,0 +1,127 @@
+schema_version: 1
+story:
+  id: 2
+  title: "Establish uv-managed src/knx_agent package skeleton with shared core API and pytest scaffolding"
+  state: implemented
+  created_on: "2026-10-24"
+  last_updated_on: "2026-10-24"
+  source_todo:
+    - "development/todos/02-package-skeleton-and-core-api.md"
+  actor: "End user (domain expert building the knx-agent solution)"
+  goal: "Stand up the canonical uv-managed src/knx_agent package layout (domain / application / adapters / sdk / cli / agent_layer / contracts sub-packages), wire one callable SDK-facing core API that the CLI and MCP adapters only wrap, define structured result models carrying provenance (evidence_sources) and limitation_notes per the response envelope in docs/implementation/003 (C7), and provide working pytest scaffolding so every later slice ships with tests from day one."
+  success_criteria:
+    - "Running `uv sync` on a clean clone produces an importable `knx_agent` package whose sub-packages (domain, application, adapters, sdk, cli, agent_layer, contracts) all resolve without import errors."
+    - "A `pytest` invocation from the repository root discovers and passes at least one test per sub-package, confirming the SDK-first test scaffolding is operational."
+    - "The core API exposes at least one end-to-end callable through the `knx_agent.sdk` surface (client.<capability> style per docs/implementation/003); tests exercise it directly without going through the CLI or MCP adapter."
+    - "Structured Pydantic v2 result models in `knx_agent.contracts` implement the common response envelope of docs/implementation/003 C7 (setup, evidence_sources as list of {kind in KNXPROJ|TRACE|USER_INPUT|VENDOR_DOCUMENTATION|SIMULATION_RULE, reference}, limitation_notes as list of strings possibly empty, optional log_book_entry_id, optional echoed detail_level) plus the error shape (code, message, optional details); the core API callable returns them and at least one pytest test asserts on evidence_sources and limitation_notes."
+    - "The CLI (typer) adapter and MCP (MCPServer, knx_agent.adapters.mcp) adapter entry points each delegate to the core API callable and add no domain logic, verified by a pytest test that mocks the core API and confirms inputs and outputs pass through unchanged."
+    - "A pytest test enforces the inward layer import direction (cli/adapters -> sdk -> application -> domain; no inner layer imports an outer layer)."
+  architecture_options:
+    - id: arch-a
+      label: "Single package, one pyproject (chosen)"
+      description: "Single `src/knx_agent` package managed by one pyproject.toml; sub-packages are plain Python packages."
+      trade_offs: "Simplest, easiest to refactor; layer boundaries are enforced by an import-direction test rather than by the build. Chosen for a skeleton slice."
+    - id: arch-b
+      label: "Multi-package uv workspace (one pyproject per sub-package)"
+      description: "Each sub-package is its own workspace member with explicit dependency declarations."
+      trade_offs: "Build-time layer isolation but higher setup cost; premature for a skeleton."
+  implementation_options:
+    - id: impl-a
+      label: "Pydantic v2 result models (chosen)"
+      description: "pydantic.BaseModel for models in knx_agent.contracts: runtime validation, JSON schema, serialisation. the mcp package (MCPServer) already builds on Pydantic, so the dependency is additive. Record in the free-to-use dependency license record (todo 12)."
+      trade_offs: "Adds a dependency; acceptable."
+    - id: impl-b
+      label: "stdlib dataclasses"
+      description: "Zero dependencies, manual validation."
+      trade_offs: "No schema generation or validation; MCP/CLI would need hand-written conversion."
+    - id: impl-c
+      label: "attrs"
+      description: "Validators and converters without Pydantic."
+      trade_offs: "Extra dependency, less aligned with the mcp package."
+  repository_context:
+    branch: story/02-package-skeleton-and-core-api
+    base_commit: bf5e366
+  current_implementation:
+    notes: "No src/knx_agent code exists; this story creates the skeleton. Story 01 is implemented, so the contract shape in docs/implementation/003 (capability catalogue, C7 envelope, layering section) is available and authoritative. 'SDK' means the Python library surface knx_agent.sdk; 'MCP' means the MCPServer tool adapter (mcp 2.x; formerly FastMCP). User decisions (2026-10-24): the skeleton end-to-end callable is the catalogue capability describe_session (placeholder body with a limitation note; core function wrapped by SDK method KnxSessionClient.describe_session, CLI `knx-agent session describe --session <session_label>`, MCP tool describe_session); the SDK entry-point class is named KnxSessionClient and must be added to docs/methodology/02-terminology-dictionary.md."
+    relevant_files:
+      - "docs/implementation/003-proposed-capability-apis.md"
+      - "docs/methodology/02-terminology-dictionary.md"
+    depends_on_stories:
+      - "development/backlog/implemented/01-capability-contracts-and-use-cases.yaml"
+  guidelines:
+    - "All package code lives under src/knx_agent/ (uv src layout)."
+    - "Every Python slice ships with pytest; SDK-first tests precede adapter tests."
+    - "knx_agent.sdk is the single authoritative entry point; CLI and MCP adapters wrap and delegate only."
+    - "Layer import direction flows inward: cli/adapters -> sdk -> application -> domain."
+    - "Use canonical names from docs/implementation/003 and docs/methodology/02-terminology-dictionary.md (session_label, mutation_name, component, evidence_sources, limitation_notes)."
+    - "The skeleton core API callable must be a genuine catalogue capability or a clearly marked placeholder that does not introduce a new capability name outside the catalogue."
+    - "Python, pytest and YAML validation and git operations run through the MCP execution surface."
+  impact_analysis:
+    methodology: "No methodology change; the terminology dictionary is consulted and updated only if a new canonical term appears."
+    architecture: "Clarification-level update only: docs/architecture/001-knx-investigation-platform.md line 110 now names the MCP implementation class as MCPServer (FastMCP in mcp 1.x, renamed in mcp 2.x). The layered shape (core, SDK, CLI/MCP adapters, agent layer) is unchanged; this story only realises it."
+    implementation: "updated - docs/implementation/003-proposed-capability-apis.md (layering section) gains a firm package-layout note describing the src/knx_agent sub-packages and envelope models; code creates the package skeleton, pyproject/pytest scaffolding, core API callable, result models and thin adapter stubs."
+    solution_surface: "top_level_runtime: instructed; subagent_topology: instructed_agent_only (rationale: the knx-agent solution has no coded sub-agent yet; the Python package is the product core built by python-creation-agent, and the agent layer is an empty placeholder until todo 11)."
+    phase_owners: "story drafting - story-telling-agent; architecture and implementation spec and task plan - architect-planning-agent; Python implementation - python-creation-agent; review gates - review-validation-agent; executable validation - qa-agent."
+    invocation_surfaces: "SDK (knx_agent.sdk, full for the skeleton callable), CLI (typer stub, delegating), MCP (MCPServer stub, delegating) are all in scope; no surface is omitted. Wiring of all catalogue capabilities is deferred to todo 10."
+  shipped_asset_alignment:
+    - asset: "coded-agent doc snapshots (src/agent_building_agent/docs/) of docs/implementation/003-proposed-capability-apis.md"
+      decision: not_applicable
+      rationale: "No coded agent in this workspace lists docs/implementation/003 in its DOC_RELATIVE_PATHS, so no snapshot is derived from the changed section."
+      follow_up_story_id: null
+    - asset: "instructed-agents/agents/architect-planning-agent and python-creation-agent markdown and skills"
+      decision: not_applicable
+      rationale: "These generic development agents are not grounded in knx-agent package layout prose; they read the workspace docs at runtime."
+      follow_up_story_id: null
+    - asset: "instructed-agents/agents/* other agents and skill markdown (story-telling, review-validation, qa, instructed-agent-creation, coded-subagent-creation, agent-dev-agent)"
+      decision: not_applicable
+      rationale: "None embed or quote the layering section of docs/implementation/003; no copy exists to realign."
+      follow_up_story_id: null
+    - asset: "future knx-agent agent-layer prompts and skills (src/knx_agent/agent_layer)"
+      decision: deferred
+      rationale: "Only an empty placeholder package is created here; prompts and skills grounded in the catalogue and package layout are created in todo 11."
+      follow_up_story_id: "development/todos/11-agent-layer.md"
+  development_cycle:
+    steps:
+      - "Verify story branch story/02-package-skeleton-and-core-api and confirm the persisted story file in development/backlog/active."
+      - "Architecture update or no-change decision; implementation-spec update (package layout, envelope models)."
+      - "Solution-surface classification and implementation task plan; consolidated review gate."
+      - "Initialise uv project with src/knx_agent layout, pyproject.toml, pytest config; add __init__.py for the seven sub-packages."
+      - "Implement contracts (Pydantic v2 envelope, evidence source, error models)."
+      - "Implement the core API callable in application/domain and expose it via knx_agent.sdk."
+      - "Implement thin typer CLI and MCPServer adapter stubs delegating to the SDK."
+      - "Write pytest tests: imports per sub-package, SDK callable, model validation, adapter delegation, import direction."
+      - "QA execution, review gate, final alignment validation."
+    validation:
+      completed_on: "2026-10-24"
+      gates:
+        - "Story review passed (round 4, after revision of rounds 1-3)."
+        - "Consolidated gate (architecture, implementation spec, solution surface, task plan) passed with deferred follow-up."
+        - "Implementation gate passed with deferred follow-up; the data-driven fixtures guardrail gap it raised was fixed (tests/fixtures/describe_session_cases.yaml, tests/conftest.py, README.md)."
+        - "Final alignment validation passed with deferred follow-up (reviewer could not read files; verified here against the surfaces below)."
+      executable_evidence:
+        - "pytest via MCP pytest_execution: 41 passed (after fixtures, pyproject and doc changes)."
+        - "qa-agent task qa-story-02-round-2: pass_fail_result yaml_validation=pass, pytest=pass."
+        - "validate_yaml: story, task plan and fixture YAML ok."
+      impact_surface_verification:
+        methodology: "updated - docs/methodology/02-terminology-dictionary.md has a KnxSessionClient row; architect-planning-agent and python-creation-agent deliberately not added (development-tool slugs, not solution terms)."
+        architecture: "updated (clarification) - docs/architecture/001-knx-investigation-platform.md line 110 names MCPServer (formerly FastMCP)."
+        implementation: "updated - docs/implementation/003-proposed-capability-apis.md package-layout/layering section and MCPServer wording; development/todos/10 wording; README.md added."
+        code_and_tests: "src/knx_agent (seven sub-packages, describe_session core callable, KnxSessionClient, typer CLI, MCPServer adapter), tests/ with fixtures, pyproject.toml and uv.lock."
+        installation_assets: "README.md documents dev install, fixtures, run command; pyproject dev group keeps agent-building-agent so plain uv sync does not remove it. The agent-dev-agent wheel folder is git-ignored and must exist in a fresh clone."
+        shipped_assets: "per shipped_asset_alignment above: three not_applicable, one deferred to todo 11."
+      deviations:
+        - "FastMCP was renamed MCPServer in mcp 2.x; code, story and docs updated, mcp pinned to >=2,<3."
+        - "uv lock and uv sync --inexact were run in the terminal because no MCP tool exists for uv."
+        - "Source files were first written via shell here-docs by the implementer; content unaffected."
+    review_findings: []
+    deferred_items:
+      - item: "Real capability implementations (session service, import, trace, etc.)"
+        reason: "Belong to todos 03-09; this story delivers the skeleton only."
+        follow_up: "development/todos/03-session-service-and-project-refresh.md"
+      - item: "Full CLI and MCP adapters for all catalogue capabilities"
+        reason: "Delivered in todo 10."
+        follow_up: "development/todos/10-cli-and-mcp-adapters.md"
+      - item: "Dependency license record for pydantic, typer, mcp"
+        reason: "Dependency governance is todo 12."
+        follow_up: "development/todos/12-dependency-license-governance.md"
+  open_questions: []
