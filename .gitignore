@@ -228,5 +228,8 @@ __marimo__/
 agent_building_agent.log
 qa-agent.log
 instructed-agent-creation-agent.log
+
 review-validation-agent.log
 story-telling-agent.log
+agent_building_agent/*
+.agent_building_agent/**
