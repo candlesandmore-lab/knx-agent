@@ -16,6 +16,8 @@ from knx_agent.contracts import (
     DescribeSessionResponse,
     ErrorInfo,
     KnxAgentError,
+    ProjectImportInfo,
+    ProjectImportSummary,
     ProjectRefreshInfo,
     ResponseEnvelope,
 )
@@ -29,6 +31,10 @@ SENTINEL = DescribeSessionResponse(
     work_directory="/w/lbl",
     source_project_absolute_path="/p.knxproj",
     project_refresh=ProjectRefreshInfo(last_status="UNCHANGED"),
+    project_import=ProjectImportInfo(
+        imported_at="2026-01-01T00:00:00Z",
+        project_import_summary=ProjectImportSummary(file_name="p.knxproj", archive_entry_count=1),
+    ),
     active_setup="sentinel-setup",
     envelope=ResponseEnvelope(setup="sentinel-setup", limitation_notes=["sentinel"]),
 )
@@ -97,7 +103,8 @@ def test_cli_create_describe_reimport_end_to_end(project, session_root):
     reimported = runner.invoke(app, ["session", "reimport", "--session", "s1", "--log-level", "FULL", *root])
     assert reimported.exit_code == 0
     assert json.loads(reimported.stdout)["project_refresh_status"] == "UNCHANGED"
-    assert [e["level"] for e in read_log_book(session_root, "s1")] == ["INFO", "INFO", "INFO"]
+    # create INFO, automatic re-import INFO, then the explicit re-import at FULL: DEBUG "Import started" + INFO
+    assert [e["level"] for e in read_log_book(session_root, "s1")] == ["INFO", "INFO", "DEBUG", "INFO"]
 
 
 def test_cli_error_json_on_stderr_and_exit_code_1(make_project, session_root):
@@ -111,6 +118,38 @@ def test_cli_error_json_on_stderr_and_exit_code_1(make_project, session_root):
     error = json.loads(result.stderr.strip().splitlines()[-1])
     assert error["code"] == "PROJECT_PARSE_ERROR"
     assert any("ERROR knx_agent" in line for line in result.stderr.splitlines())  # Python logging handler
+
+
+def test_cli_returns_real_import_results(build, session_root):
+    runner = CliRunner()
+    root = ["--session-root", str(session_root)]
+    project = build(edits=[{"path": "areas.0.lines.0.components.0.objects.0.links", "value": ["GA-999"]}])
+    created = json.loads(
+        runner.invoke(app, ["session", "create", "--project", str(project), "--session-label", "s1", *root]).stdout
+    )
+    summary = created["project_import_summary"]
+    assert summary["node_counts"]["component"] == 3 and summary["warning_counts"] == {"GROUP_ADDRESS_LINK_UNRESOLVED": 1}
+    assert created["envelope"]["limitation_notes"][0].startswith("[GROUP_ADDRESS_LINK_UNRESOLVED]")
+    described = json.loads(runner.invoke(app, ["session", "describe", "--session", "s1", *root]).stdout)
+    assert described["project_import"]["project_import_summary"] == summary
+    assert len(described["project_import"]["fingerprint"]) == 64
+    assert described["project_import"]["graph_file"].endswith("project-graph.json")
+    reimported = json.loads(runner.invoke(app, ["session", "reimport", "--session", "s1", *root]).stdout)
+    assert reimported["changes"] == [] and reimported["invalidated_references"] == []
+    assert reimported["envelope"]["limitation_notes"] == created["envelope"]["limitation_notes"]
+
+
+def test_cli_parse_error_prints_logging_line_then_error_json_with_reason(make_project, session_root):
+    result = CliRunner().invoke(
+        app,
+        ["session", "create", "--project", str(make_project("encrypted")), "--session-label", "s1",
+         "--session-root", str(session_root)],
+    )  # fmt: skip
+    assert result.exit_code == 1 and result.stdout == ""
+    lines = result.stderr.strip().splitlines()
+    assert "ERROR knx_agent" in lines[0] and "PROJECT_PARSE_ERROR" in lines[0]
+    error = json.loads(lines[-1])
+    assert error["code"] == "PROJECT_PARSE_ERROR" and error["details"]["reason"] == "ENCRYPTED"
 
 
 def test_cli_invalid_log_level(project, session_root):
@@ -160,9 +199,28 @@ def test_mcp_tools_end_to_end_with_startup_arguments(mcp_startup, project, sessi
     assert created.work_directory == str(session_root.resolve() / "s1")
     mcp_package.describe_session("s1")
     assert mcp_package.reimport_system_definition("s1").project_refresh_status == "UNCHANGED"
-    assert [e["level"] for e in read_log_book(session_root, "s1")] == ["INFO", "DEBUG", "INFO"]
+    assert [e["level"] for e in read_log_book(session_root, "s1")] == ["DEBUG", "INFO", "DEBUG", "DEBUG", "INFO"]
     with pytest.raises(ValueError, match="SESSION_NOT_FOUND"):
         mcp_package.describe_session("ghost")
+
+
+def test_mcp_tools_return_real_import_results(mcp_startup, build, session_root):
+    mcp_startup["session_root"] = str(session_root)
+    project = build(edits=[{"path": "areas.0.lines.0.components.0.objects.0.links", "value": ["GA-999"]}])
+    created = mcp_package.create_session(project_path=str(project), session_label="s1")
+    assert created.project_import_summary.node_counts["communication_object"] == 6
+    assert created.project_import_summary.warning_total == 1
+    assert created.envelope.limitation_notes[0].startswith("[GROUP_ADDRESS_LINK_UNRESOLVED]")
+    described = mcp_package.describe_session("s1")
+    assert described.project_import.project_import_summary == created.project_import_summary
+    reimported = mcp_package.reimport_system_definition("s1")
+    assert reimported.project_refresh_status == "UNCHANGED" and reimported.changes == []
+
+
+def test_mcp_parse_error_maps_code_and_message(mcp_startup, make_project, session_root):
+    mcp_startup["session_root"] = str(session_root)
+    with pytest.raises(ValueError, match="PROJECT_PARSE_ERROR"):
+        mcp_package.create_session(project_path=str(make_project("not_zip")), session_label="s1")
 
 
 def test_mcp_startup_arguments_parsed():

@@ -10,5 +10,7 @@ cases:
   - {id: mtime-changed, change: mtime, describe_status: CHANGED, describe_reimport_count: 1, reimport_status: CHANGED, reimport_count_after_reimport: 1}
   - {id: size-changed, change: size, describe_status: CHANGED, describe_reimport_count: 1, reimport_status: CHANGED, reimport_count_after_reimport: 1}
   - {id: mtime-and-size-changed, change: both, describe_status: CHANGED, describe_reimport_count: 1, reimport_status: CHANGED, reimport_count_after_reimport: 1}
+  # The story 03 limitation: content changed, mtime and size equal. Detected through the fingerprint.
+  - {id: content-changed-same-mtime-and-size, change: content_same_mtime_and_size, describe_status: CHANGED, describe_reimport_count: 1, reimport_status: CHANGED, reimport_count_after_reimport: 1}
   - {id: file-missing, change: missing, describe_error: PROJECT_FILE_UNREADABLE, reimport_error: PROJECT_FILE_UNREADABLE}
   - {id: file-no-longer-zip, change: not_zip, describe_error: PROJECT_PARSE_ERROR, reimport_error: PROJECT_PARSE_ERROR}

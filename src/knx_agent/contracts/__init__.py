@@ -11,8 +11,14 @@ from .errors import (
     KnxAgentError,
     error,
 )
+from .import_codes import (
+    IMPORT_WARNING_CODES,
+    OPTIONAL_PART_UNREADABLE_REASONS,
+    PROJECT_PARSE_ERROR_REASONS,
+)
 from .models import (
     ERROR_LEVEL,
+    ApplicationProgramCounts,
     CreateSessionRequest,
     CreateSessionResponse,
     DescribeSessionRequest,
@@ -21,7 +27,11 @@ from .models import (
     ErrorInfo,
     EvidenceKind,
     EvidenceSource,
+    ImportWarning,
+    InvalidatedReference,
     LogLevel,
+    ProjectChange,
+    ProjectImportInfo,
     ProjectImportSummary,
     ProjectRefreshInfo,
     ReimportSystemDefinitionRequest,
@@ -31,6 +41,14 @@ from .models import (
 )
 
 __all__ = [
+    "ApplicationProgramCounts",
+    "IMPORT_WARNING_CODES",
+    "ImportWarning",
+    "InvalidatedReference",
+    "OPTIONAL_PART_UNREADABLE_REASONS",
+    "PROJECT_PARSE_ERROR_REASONS",
+    "ProjectChange",
+    "ProjectImportInfo",
     "ERROR_LEVEL",
     "INVALID_LOG_LEVEL",
     "INVALID_REQUEST",

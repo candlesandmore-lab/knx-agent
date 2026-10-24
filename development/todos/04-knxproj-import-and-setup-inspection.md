@@ -5,3 +5,10 @@ Blocker: needs a sanitized representative `.knxproj` sample (or structure descri
 Answered: selector may be name/individual address/ETS id/instance path; partial names (e.g. "Kid") return sets; SUMMARY and MEDIUM = topology + device-level parameters; FULL adds group addresses, communication objects, purpose and anything else available.
 Capability names: see todo 01 (find_group_address and load_project missing in 003).
 Depends on: 02, 03
+
+SPLIT (2026-10-24): this todo is delivered by story 4 (`.knxproj` import, project graph, session integration, fingerprint refresh). The query capabilities (summarize_topology, list_components, describe_component, trace_group_flow) moved to `development/todos/15-component-inspection-capabilities.md` (story B).
+
+Additional information (user, 2026-10-24):
+- (a) All `.knxproj` files are created with ETS 6 Professional (sample ToolVersion 6.1.5686.0, project XML namespace `http://knx.org/xml/project/22`). ETS 6 is the supported version; other ETS versions are out of scope unless added later. Use existing parsers/knowledge where license-compatible.
+- (c) First real sample: `tests/lifedata/20261010-EFH-Armbruster.knxproj` (7.5 MB; user decided it may be committed). Observed layout: project folder `P-xxxx/` with `project.xml` and `0.xml` (28 device instances, 695 group addresses, 692 communication object references, 3132 parameter instance references, 21 spaces, 2 areas / 3 lines), manufacturer catalogs `M-xxxx/` with large application program XMLs (up to 50 MB), `knx_master.xml` (datapoint types), `.signature`/`.certificate` files; `ProjectTrace` entries in `project.xml` are ETS change history, not bus traces.
+- Parser decision (user, 2026-10-24): write our own parser (lxml or ElementTree); `xknxproject` (GPL-2.0, repository license is MIT) is used only as a development-time test cross-check, never shipped or copied. Blocker "needs a sample" is resolved by the sample above; capability names follow docs/implementation/003 (list_components, describe_component, summarize_topology, trace_group_flow; the todo's load_project/describe_device/find_group_address are superseded).

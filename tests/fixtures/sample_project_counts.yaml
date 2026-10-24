@@ -1,0 +1,48 @@
+# Golden counts of the committed sample project tests/lifedata/20261010-EFH-Armbruster.knxproj.
+# User-editable. A mismatch is investigated, not silently re-baselined (003 'project_import_summary').
+# Initial values were measured at planning from element counts in the XML; the importer reproduced them.
+# component_type_counts is derived (component typing rules CT0 to CT4) and was recorded after the first run.
+
+sample_file: 20261010-EFH-Armbruster.knxproj
+project_id: P-051B
+ets_tool_version: 6.1.5686.0
+schema_namespace: http://knx.org/xml/project/22
+created_by: ETS6
+group_address_style: ThreeLevel
+archive_entry_count: 82
+
+node_counts:
+  installation: 1
+  area: 2
+  line: 3
+  space: 21
+  component: 28
+  communication_object: 692
+  group_address: 695
+  group_range: 60
+  parameter: 3132
+  scene: 0
+  application_program: 12
+
+relation_counts:
+  membership: 677
+  placed_in: 26
+
+component_type_counts:
+  ACTUATOR: 2
+  CONTROLLER: 11
+  IP_COUPLER_OR_INTERFACE: 1
+  SENSOR: 11
+  UNTYPED: 3
+
+# 13 application program XMLs are in the archive; one is referenced by no component and is never opened.
+application_programs: {referenced: 12, read: 12, unreadable: 0}
+unreferenced_program_entry: M-0083/M-0083_A-003B-24-3717.xml
+unreferenced_program_id: M-0083_A-003B-24-3717
+
+# Module-instance references of one component are not modelled (003 implementation notes, P4).
+warning_total: 26
+warning_counts: {COMOBJECT_DEFINITION_UNRESOLVED: 12, PARAMETER_DEFINITION_UNRESOLVED: 14}
+warning_component: P-051B-0_DI-37
+
+example_component_ids: [P-051B-0_DI-6, P-051B-0_DI-37]

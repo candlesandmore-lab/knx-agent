@@ -1,34 +1,36 @@
 # Expected log book levels (in order) after a scenario, per configured log_level.
-# ERROR entries are written at every log_level.
+# ERROR entries are written at every log_level. "Import started" is a DEBUG entry written before every import
+# (create_session writes it into the new log book just before the INFO entry "Session created").
+# The default project is clean, so there are no per-warning DEBUG entries here (see test_session_service.py).
 #
 # scenario: create | describe_unchanged | describe_changed | reimport | describe_missing_file |
 #           reimport_missing_file | describe_not_zip
 
 cases:
   - {id: create-info, log_level: INFO, scenario: create, expected_levels: [INFO]}
-  - {id: create-debug, log_level: DEBUG, scenario: create, expected_levels: [INFO]}
-  - {id: create-full, log_level: FULL, scenario: create, expected_levels: [INFO]}
+  - {id: create-debug, log_level: DEBUG, scenario: create, expected_levels: [DEBUG, INFO]}
+  - {id: create-full, log_level: FULL, scenario: create, expected_levels: [DEBUG, INFO]}
 
   - {id: unchanged-info, log_level: INFO, scenario: describe_unchanged, expected_levels: [INFO]}
-  - {id: unchanged-debug, log_level: DEBUG, scenario: describe_unchanged, expected_levels: [INFO, DEBUG]}
-  - {id: unchanged-full, log_level: FULL, scenario: describe_unchanged, expected_levels: [INFO, DEBUG]}
+  - {id: unchanged-debug, log_level: DEBUG, scenario: describe_unchanged, expected_levels: [DEBUG, INFO, DEBUG]}
+  - {id: unchanged-full, log_level: FULL, scenario: describe_unchanged, expected_levels: [DEBUG, INFO, DEBUG]}
 
   - {id: changed-info, log_level: INFO, scenario: describe_changed, expected_levels: [INFO, INFO]}
-  - {id: changed-debug, log_level: DEBUG, scenario: describe_changed, expected_levels: [INFO, INFO]}
-  - {id: changed-full, log_level: FULL, scenario: describe_changed, expected_levels: [INFO, INFO]}
+  - {id: changed-debug, log_level: DEBUG, scenario: describe_changed, expected_levels: [DEBUG, INFO, DEBUG, INFO]}
+  - {id: changed-full, log_level: FULL, scenario: describe_changed, expected_levels: [DEBUG, INFO, DEBUG, INFO]}
 
   - {id: reimport-info, log_level: INFO, scenario: reimport, expected_levels: [INFO, INFO]}
-  - {id: reimport-debug, log_level: DEBUG, scenario: reimport, expected_levels: [INFO, INFO]}
-  - {id: reimport-full, log_level: FULL, scenario: reimport, expected_levels: [INFO, INFO]}
+  - {id: reimport-debug, log_level: DEBUG, scenario: reimport, expected_levels: [DEBUG, INFO, DEBUG, INFO]}
+  - {id: reimport-full, log_level: FULL, scenario: reimport, expected_levels: [DEBUG, INFO, DEBUG, INFO]}
 
   - {id: error-missing-describe-info, log_level: INFO, scenario: describe_missing_file, expected_levels: [INFO, ERROR]}
-  - {id: error-missing-describe-debug, log_level: DEBUG, scenario: describe_missing_file, expected_levels: [INFO, ERROR]}
-  - {id: error-missing-describe-full, log_level: FULL, scenario: describe_missing_file, expected_levels: [INFO, ERROR]}
+  - {id: error-missing-describe-debug, log_level: DEBUG, scenario: describe_missing_file, expected_levels: [DEBUG, INFO, ERROR]}
+  - {id: error-missing-describe-full, log_level: FULL, scenario: describe_missing_file, expected_levels: [DEBUG, INFO, ERROR]}
 
   - {id: error-missing-reimport-info, log_level: INFO, scenario: reimport_missing_file, expected_levels: [INFO, ERROR]}
-  - {id: error-missing-reimport-debug, log_level: DEBUG, scenario: reimport_missing_file, expected_levels: [INFO, ERROR]}
-  - {id: error-missing-reimport-full, log_level: FULL, scenario: reimport_missing_file, expected_levels: [INFO, ERROR]}
+  - {id: error-missing-reimport-debug, log_level: DEBUG, scenario: reimport_missing_file, expected_levels: [DEBUG, INFO, ERROR]}
+  - {id: error-missing-reimport-full, log_level: FULL, scenario: reimport_missing_file, expected_levels: [DEBUG, INFO, ERROR]}
 
   - {id: error-not-zip-info, log_level: INFO, scenario: describe_not_zip, expected_levels: [INFO, ERROR]}
-  - {id: error-not-zip-debug, log_level: DEBUG, scenario: describe_not_zip, expected_levels: [INFO, ERROR]}
-  - {id: error-not-zip-full, log_level: FULL, scenario: describe_not_zip, expected_levels: [INFO, ERROR]}
+  - {id: error-not-zip-debug, log_level: DEBUG, scenario: describe_not_zip, expected_levels: [DEBUG, INFO, DEBUG, ERROR]}
+  - {id: error-not-zip-full, log_level: FULL, scenario: describe_not_zip, expected_levels: [DEBUG, INFO, DEBUG, ERROR]}

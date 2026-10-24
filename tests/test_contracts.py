@@ -82,6 +82,39 @@ def test_log_level_ordering():
         LogLevel("ERROR")
 
 
+def test_project_import_contract_shapes(client, project):
+    from knx_agent.contracts import (
+        ImportWarning,
+        InvalidatedReference,
+        ProjectChange,
+        ProjectImportInfo,
+        ProjectImportSummary,
+    )
+
+    assert set(ProjectImportSummary.model_fields) == {
+        "file_name", "archive_entry_count", "ets_tool_version", "schema_namespace", "created_by", "project_id",
+        "project_name", "group_address_style", "node_counts", "relation_counts", "component_type_counts",
+        "application_programs", "warning_total", "warning_counts", "graph_file", "graph_schema_version",
+    }  # fmt: skip  (limitation_note of story 03 is gone)
+    assert set(ProjectImportInfo.model_fields) == {"imported_at", "fingerprint", "graph_file", "project_import_summary"}
+    assert set(ImportWarning.model_fields) == {"code", "message", "location"}
+    assert set(ProjectChange.model_fields) == {"entity", "change", "id", "label", "details"}
+    assert set(InvalidatedReference.model_fields) == {
+        "reference_kind", "owner", "component_id", "group_address_id", "reason",
+    }  # fmt: skip
+    with pytest.raises(ValidationError):
+        ProjectChange(entity="parameter", change="added", id="x", label="x")
+    with pytest.raises(ValidationError):
+        ProjectImportSummary(file_name="a", archive_entry_count=1, limitation_note="gone")
+    client.create_session(project_path=project, session_label="abc")
+    described = client.describe_session(session_label="abc")
+    assert described.project_import.project_import_summary.node_counts["component"] == 3
+    with pytest.raises(ValidationError):
+        DescribeSessionResponse.model_validate(
+            {**described.model_dump(mode="json"), "project_import": None}
+        )  # project_import is part of every describe_session response
+
+
 def test_models_serialise_and_expose_json_schema(client, project):
     created = client.create_session(project_path=project, session_label="abc")
     described = client.describe_session(session_label="abc")
@@ -92,7 +125,7 @@ def test_models_serialise_and_expose_json_schema(client, project):
     assert DescribeSessionRequest(session_label="a").session_label == "a"
     assert set(DescribeSessionResponse.model_fields) == {
         "session_label", "work_directory", "source_project_absolute_path", "project_refresh",
-        "active_setup", "setups", "trace_artifacts", "log_book_references", "envelope",
+        "project_import", "active_setup", "setups", "trace_artifacts", "log_book_references", "envelope",
     }  # fmt: skip
     assert set(CreateSessionResponse.model_fields) == {
         "session_label", "work_directory", "session_state_path", "source_project_absolute_path",

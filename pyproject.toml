@@ -19,6 +19,9 @@ dev = [
     "pytest>=8.0",
     # Development tooling: keeps agent-dev-agent in the lock file so a plain `uv sync` does not remove it.
     "agent-building-agent",
+    # Dev-time cross-check only (story 04): GPL-2.0 per package metadata, never a runtime dependency,
+    # never imported by src/.
+    "xknxproject>=3.10.0",
 ]
 
 [tool.uv.sources]

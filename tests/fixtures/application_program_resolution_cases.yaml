@@ -1,0 +1,125 @@
+# Referenced application program (003 'Referenced application program'): paths P1 (Hardware2ProgramRefId ->
+# Hardware.xml -> ApplicationProgramRef) and P2 (textual fallback), disagreement, parameter-reference prefix,
+# ProductRefId alone, unreferenced programs never opened, missing programs.
+#
+# Keys: id, patch/edits/mutations (archive description), then
+#   components: component id -> expected application_program_id (null allowed)
+#   programs: {referenced, read, unreadable}
+#   opened_programs: exact set of application program entries opened for reading (the guard scan and the parse
+#                    both open an entry; only presence matters)
+#   warning_counts: exact multiset of warning codes
+# Shorthands: A1 = M-0001_A-0001-01-AAAA (components DI-1, DI-2), A2 = M-0001_A-0002-01-BBBB (DI-3),
+# A3 = M-0001_A-0003-01-CCCC (present in the archive and in Hardware.xml, referenced by no component).
+
+cases:
+  - id: p1-via-hardware2program
+    components:
+      P-0001-0_DI-1: M-0001_A-0001-01-AAAA
+      P-0001-0_DI-2: M-0001_A-0001-01-AAAA
+      P-0001-0_DI-3: M-0001_A-0002-01-BBBB
+    programs: {referenced: 2, read: 2, unreadable: 0}
+    opened_programs: [M-0001/M-0001_A-0001-01-AAAA.xml, M-0001/M-0001_A-0002-01-BBBB.xml]
+    warning_counts: {}
+  - id: p2-fallback-hardware-xml-absent
+    mutations: [{op: remove, entry: hardware_xml}]
+    components:
+      P-0001-0_DI-1: M-0001_A-0001-01-AAAA
+      P-0001-0_DI-2: M-0001_A-0001-01-AAAA
+      P-0001-0_DI-3: M-0001_A-0002-01-BBBB
+    programs: {referenced: 2, read: 2, unreadable: 0}
+    opened_programs: [M-0001/M-0001_A-0001-01-AAAA.xml, M-0001/M-0001_A-0002-01-BBBB.xml]
+    warning_counts: {OPTIONAL_PART_MISSING: 1}
+  - id: p2-fallback-hardware-xml-unreadable
+    mutations: [{op: malform, entry: hardware_xml}]
+    components:
+      P-0001-0_DI-1: M-0001_A-0001-01-AAAA
+      P-0001-0_DI-2: M-0001_A-0001-01-AAAA
+      P-0001-0_DI-3: M-0001_A-0002-01-BBBB
+    programs: {referenced: 2, read: 2, unreadable: 0}
+    opened_programs: [M-0001/M-0001_A-0001-01-AAAA.xml, M-0001/M-0001_A-0002-01-BBBB.xml]
+    warning_counts: {OPTIONAL_PART_UNREADABLE: 1}
+  - id: p2-fallback-hardware-xml-with-dtd
+    mutations: [{op: doctype, entry: hardware_xml}]
+    components:
+      P-0001-0_DI-1: M-0001_A-0001-01-AAAA
+      P-0001-0_DI-3: M-0001_A-0002-01-BBBB
+    programs: {referenced: 2, read: 2, unreadable: 0}
+    opened_programs: [M-0001/M-0001_A-0001-01-AAAA.xml, M-0001/M-0001_A-0002-01-BBBB.xml]
+    warning_counts: {OPTIONAL_PART_UNREADABLE: 1}
+  - id: p2-fallback-no-matching-hardware2program
+    edits: [{path: "areas.0.lines.0.components.0.hardware2program", value: "M-0001_H-9_HP-0001-01-AAAA"}]
+    components:
+      P-0001-0_DI-1: M-0001_A-0001-01-AAAA
+      P-0001-0_DI-2: M-0001_A-0001-01-AAAA
+      P-0001-0_DI-3: M-0001_A-0002-01-BBBB
+    programs: {referenced: 2, read: 2, unreadable: 0}
+    opened_programs: [M-0001/M-0001_A-0001-01-AAAA.xml, M-0001/M-0001_A-0002-01-BBBB.xml]
+    warning_counts: {PRODUCT_REFERENCE_UNRESOLVED: 1}
+  - id: p1-wins-on-disagreement-with-text-derivation
+    # Hardware.xml maps DI-3's Hardware2Program to A3, the text of the reference suggests A2: P1 (A3) wins.
+    edits: [{path: "catalog.manufacturers.0.hardware.1.programs.0.app", value: "M-0001_A-0003-01-CCCC"}]
+    components:
+      P-0001-0_DI-1: M-0001_A-0001-01-AAAA
+      P-0001-0_DI-3: M-0001_A-0003-01-CCCC
+    programs: {referenced: 2, read: 2, unreadable: 0}
+    opened_programs: [M-0001/M-0001_A-0001-01-AAAA.xml, M-0001/M-0001_A-0003-01-CCCC.xml]
+    warning_counts: {APPLICATION_PROGRAM_REFERENCE_MISMATCH: 1, COMOBJECT_DEFINITION_UNRESOLVED: 1}
+  - id: p1-wins-and-textual-program-is-not-opened
+    # DI-1 and DI-2 are mapped to A2 by Hardware.xml: A1 is then referenced by nobody and never opened.
+    edits: [{path: "catalog.manufacturers.0.hardware.0.programs.0.app", value: "M-0001_A-0002-01-BBBB"}]
+    components:
+      P-0001-0_DI-1: M-0001_A-0002-01-BBBB
+      P-0001-0_DI-2: M-0001_A-0002-01-BBBB
+      P-0001-0_DI-3: M-0001_A-0002-01-BBBB
+    programs: {referenced: 1, read: 1, unreadable: 0}
+    opened_programs: [M-0001/M-0001_A-0002-01-BBBB.xml]
+    # 2 x mismatch (P1 vs P2) for DI-1 and DI-2, 1 x parameter prefix (DI-2 names A1), objects O-2/O-3 of DI-2
+    # do not exist in A2, both parameters of DI-2 stay unresolved
+    warning_counts: {APPLICATION_PROGRAM_REFERENCE_MISMATCH: 3, COMOBJECT_DEFINITION_UNRESOLVED: 2, PARAMETER_DEFINITION_UNRESOLVED: 2}
+  - id: parameter-reference-prefix-disagrees
+    edits: [{path: "areas.0.lines.0.components.1.parameters.0.ref", value: "M-0001_A-0002-01-BBBB_P-1_R-1"}]
+    components:
+      P-0001-0_DI-2: M-0001_A-0001-01-AAAA
+    programs: {referenced: 2, read: 2, unreadable: 0}
+    opened_programs: [M-0001/M-0001_A-0001-01-AAAA.xml, M-0001/M-0001_A-0002-01-BBBB.xml]
+    warning_counts: {APPLICATION_PROGRAM_REFERENCE_MISMATCH: 1, PARAMETER_DEFINITION_UNRESOLVED: 1}
+  - id: product-ref-alone-does-not-resolve-a-program
+    edits: [{path: "areas.0.lines.0.components.2.hardware2program", value: null}]
+    components:
+      P-0001-0_DI-1: M-0001_A-0001-01-AAAA
+      P-0001-0_DI-3: null
+    programs: {referenced: 1, read: 1, unreadable: 0}
+    opened_programs: [M-0001/M-0001_A-0001-01-AAAA.xml]
+    warning_counts: {APPLICATION_PROGRAM_MISSING: 1}
+  - id: unreferenced-program-in-archive-is-not-opened
+    # Same as the first case, stated on its own: A3 is in the archive and in Hardware.xml but nobody uses it.
+    components:
+      P-0001-0_DI-1: M-0001_A-0001-01-AAAA
+    programs: {referenced: 2, read: 2, unreadable: 0}
+    opened_programs: [M-0001/M-0001_A-0001-01-AAAA.xml, M-0001/M-0001_A-0002-01-BBBB.xml]
+    not_opened: [M-0001/M-0001_A-0003-01-CCCC.xml]
+    warning_counts: {}
+  - id: program-missing-from-archive
+    mutations: [{op: remove, entry: "application_xml:M-0001_A-0001-01-AAAA"}]
+    components:
+      P-0001-0_DI-1: M-0001_A-0001-01-AAAA
+      P-0001-0_DI-3: M-0001_A-0002-01-BBBB
+    programs: {referenced: 2, read: 1, unreadable: 0}
+    opened_programs: [M-0001/M-0001_A-0002-01-BBBB.xml]
+    warning_counts: {APPLICATION_PROGRAM_MISSING: 2}
+  - id: program-missing-and-hardware-xml-absent
+    mutations: [{op: remove, entry: hardware_xml}, {op: remove, entry: "application_xml:M-0001_A-0001-01-AAAA"}]
+    components:
+      P-0001-0_DI-1: null
+      P-0001-0_DI-3: M-0001_A-0002-01-BBBB
+    programs: {referenced: 1, read: 1, unreadable: 0}
+    opened_programs: [M-0001/M-0001_A-0002-01-BBBB.xml]
+    warning_counts: {OPTIONAL_PART_MISSING: 1, APPLICATION_PROGRAM_MISSING: 2}
+  - id: program-rejected-by-xml-guard
+    mutations: [{op: doctype, entry: "application_xml:M-0001_A-0001-01-AAAA"}]
+    components:
+      P-0001-0_DI-1: M-0001_A-0001-01-AAAA
+      P-0001-0_DI-3: M-0001_A-0002-01-BBBB
+    programs: {referenced: 2, read: 1, unreadable: 1}
+    opened_programs: [M-0001/M-0001_A-0001-01-AAAA.xml, M-0001/M-0001_A-0002-01-BBBB.xml]
+    warning_counts: {OPTIONAL_PART_UNREADABLE: 1, COMOBJECT_DEFINITION_UNRESOLVED: 4, PARAMETER_DEFINITION_UNRESOLVED: 2}

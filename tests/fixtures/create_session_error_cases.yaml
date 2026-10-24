@@ -1,7 +1,9 @@
 # create_session failure cases. Validation order is fixed:
 # SESSION_LABEL_INVALID, PROJECT_FILE_UNREADABLE, PROJECT_PARSE_ERROR, SESSION_LABEL_EXISTS.
 #
-# project: zip | not_zip | empty | directory | missing   (see make_project in tests/conftest.py)
+# project: zip | plain_zip | encrypted | malformed_zero | not_zip | empty | directory | missing
+#          (see make_project in tests/conftest.py; zip is a valid synthetic ETS 6 archive)
+# expected_reason: details.reason of PROJECT_PARSE_ERROR (optional)
 # label_exists: true pre-creates a session with that label first.
 
 cases:
@@ -11,7 +13,10 @@ cases:
   - {id: missing-file, label: "s1", project: missing, label_exists: false, expected_code: PROJECT_FILE_UNREADABLE}
   - {id: directory-instead-of-file, label: "s1", project: directory, label_exists: false, expected_code: PROJECT_FILE_UNREADABLE}
   - {id: unreadable-wins-over-label-exists, label: "s1", project: missing, label_exists: true, expected_code: PROJECT_FILE_UNREADABLE}
-  - {id: not-a-zip, label: "s1", project: not_zip, label_exists: false, expected_code: PROJECT_PARSE_ERROR}
-  - {id: empty-file, label: "s1", project: empty, label_exists: false, expected_code: PROJECT_PARSE_ERROR}
-  - {id: parse-error-wins-over-label-exists, label: "s1", project: not_zip, label_exists: true, expected_code: PROJECT_PARSE_ERROR}
+  - {id: not-a-zip, label: "s1", project: not_zip, label_exists: false, expected_code: PROJECT_PARSE_ERROR, expected_reason: NOT_A_ZIP}
+  - {id: empty-file, label: "s1", project: empty, label_exists: false, expected_code: PROJECT_PARSE_ERROR, expected_reason: NOT_A_ZIP}
+  - {id: zip-without-project-folder, label: "s1", project: plain_zip, label_exists: false, expected_code: PROJECT_PARSE_ERROR, expected_reason: PROJECT_FOLDER_NOT_FOUND}
+  - {id: encrypted-entry, label: "s1", project: encrypted, label_exists: false, expected_code: PROJECT_PARSE_ERROR, expected_reason: ENCRYPTED}
+  - {id: malformed-required-part, label: "s1", project: malformed_zero, label_exists: false, expected_code: PROJECT_PARSE_ERROR, expected_reason: REQUIRED_PART_MALFORMED}
+  - {id: parse-error-wins-over-label-exists, label: "s1", project: not_zip, label_exists: true, expected_code: PROJECT_PARSE_ERROR, expected_reason: NOT_A_ZIP}
   - {id: label-exists, label: "s1", project: zip, label_exists: true, expected_code: SESSION_LABEL_EXISTS}

@@ -19,4 +19,15 @@ root, field list, log point table and error order are specified only in
 `docs/implementation/003-proposed-capability-apis.md` (section "Session service realisation (story 03)");
 this note defines nothing. Task plan: `development/backlog/active/03-session-service-and-project-refresh-task-plan.yaml`.
 
+## Slice 2 realisation note (story 04)
+
+Slice 2 (`.knxproj` import) is realised by story 04: an own ETS 6 parser (stdlib `ElementTree` streaming;
+lxml only if the first benchmark task breaches the 30 s rule), a project graph with source facts and derived
+facts persisted as `project-graph.json` in the work-directory, a hostile-archive guard, a SHA-256 fingerprint in
+the project refresh check, and the real import behind `create_session`, `reimport_system_definition` and
+`describe_session` on SDK, CLI and MCP. Everything is specified only in
+`docs/implementation/003-proposed-capability-apis.md` (section "Project import and project graph (story 04)");
+this note defines nothing. The query capabilities are todo 15. Task plan:
+`development/backlog/active/04-knxproj-import-and-project-graph-task-plan.yaml`.
+
 Related: `docs/implementation/001-solution-concept.md`, `docs/architecture/001-knx-investigation-platform.md`.

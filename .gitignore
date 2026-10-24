@@ -234,3 +234,9 @@ story-telling-agent.log
 agent_building_agent/*
 .agent_building_agent/**
 agent-dev-agent/*
+
+# KNX agent runtimes
+.knx-agent/*
+
+# Synology Drive
+.DS_Store

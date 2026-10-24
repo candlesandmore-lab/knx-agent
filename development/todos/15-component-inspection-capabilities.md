@@ -1,0 +1,7 @@
+# Todo 15: Component inspection capabilities (story B of todo 04)
+Source: split from development/todos/04-knxproj-import-and-setup-inspection.md (2026-10-24, calling agent decision to keep stories small).
+Goal: on top of the project graph delivered by todo 04 (story A), implement the query capabilities of docs/implementation/003-proposed-capability-apis.md on SDK, CLI and MCP: `summarize_topology`, `list_components` (component selector by display name, instance path, individual address, ETS id; partial names return sets; ambiguous selector returns the set; detail levels SUMMARY / MEDIUM (default) / FULL), `describe_component`, `trace_group_flow` (group address selector; sending and listening communication objects and their components via memberships; scenes and routing are open questions).
+Answered (from todo 04): SUMMARY and MEDIUM = topology + component-level parameters; FULL adds group addresses, communication objects, purpose and anything else available. Convention C4 in docs/implementation/003 leaves the exact MEDIUM fields to this todo.
+Open questions to settle when the story is drafted: instance path syntax; whether SUMMARY and MEDIUM really differ; describe_component with an ambiguous selector; partial-name matching rules (case, substring vs prefix, exact vs partial per selector kind); trace_group_flow scope.
+Depends on: 04 (story A: import and project graph)
+Additional information (user, 2026-10-24): ETS 6 Professional projects only; first real sample `tests/lifedata/20261010-EFH-Armbruster.knxproj`.

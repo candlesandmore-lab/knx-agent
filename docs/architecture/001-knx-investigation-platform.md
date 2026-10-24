@@ -8,6 +8,7 @@
   - `docs/implementation/003-proposed-capability-apis.md`
 - change_type: `update`
 - story_03_clarification: Story 03 (session service) clarifies section 2b without changing boundaries. Decision (2026-10-24): sessions are resolved only by explicit `session_label` (replaces "Resolves active-session context"); all sessions live under a configurable session root; the refresh check is applied in the application layer via a separate `ProjectRefreshGuard` (arch-b, internal structure); the fingerprint is deferred (field present, `null`). Details: `docs/implementation/003-proposed-capability-apis.md`, section "Session service realisation (story 03)".
+- story_04_clarification: Story 04 (`.knxproj` import and project graph) clarifies section 3 and the "Project graph" and "Session state" data contracts without changing boundaries. Decisions (2026-10-24): ETS 6 Professional only; own parser (no runtime dependency on xknxproject); stable IDs from ETS `Id` attributes with a deterministic structural fallback; source facts and derived facts stored separately; the project graph is persisted in the session work-directory as `project-graph.json` next to `session-state.yaml`; the fingerprint (SHA-256 of the `.knxproj` bytes) becomes real and joins the project refresh check. Architecture option arch-a (layered importer, graph model and derivation) is chosen; arch-b (flat tables) is not. Details: `docs/implementation/003-proposed-capability-apis.md`, section "Project import and project graph (story 04)".
 - rationale: The repository needs both an initial architecture boundary and a shared vocabulary so later implementation work and agent prompts can refer to the same concepts consistently. Story 01 (capability catalogue) adds a clarification-level update: sessions are addressed by `session_label`, "component" is the only term for KNX components, sessions hold a persistent current system state per setup with an active setup, and log levels govern the log books. No subsystem or boundary changes. `docs/architecture/000-terminology.md` does not exist; terminology lives only in `docs/methodology/02-terminology-dictionary.md`, so no change applies there.
 - downstream_impacts:
   - `docs/implementation/001-solution-concept.md` (reduced to references)
@@ -125,9 +126,20 @@ flowchart LR
 
 ### 3. KNX system model
 
-- Parses `.knxproj` content into a normalized domain graph.
+- Parses `.knxproj` content into a normalized domain graph (the project graph).
 - Represents physical topology, group addresses, components, communication objects, parameters, links, scenes, and component typing derived from the project.
 - Stores expected telegram semantics where derivable from project data.
+
+Clarification (story 04, decided 2026-10-24; boundaries unchanged):
+
+- Scope: ETS 6 Professional projects only (project XML namespace `http://knx.org/xml/project/22`, ToolVersion major 6). Other ETS versions are rejected with `PROJECT_PARSE_ERROR`; they are out of scope until the user decides otherwise.
+- Own parser: the importer is our own code (arch-a: layered importer, graph model and derivation). `xknxproject` (GPL-2.0) is a development-time test cross-check only, never a runtime dependency, no code copied. arch-b (single-pass flat tables) is not chosen: topology traversal and the source/derived separation matter more than a simpler importer.
+- Layers: graph model and derivation rules (component typing, reverse indexes) are pure and live in `domain`; the archive guard, the ETS 6 parser, persistence and fingerprinting live in `application`. The query layer (selectors, detail levels) is a later story (`development/todos/15-component-inspection-capabilities.md`) and reads the persisted project graph.
+- Stable IDs: the ETS `Id` attribute where present; deterministic composite IDs for ETS elements without an `Id` (communication objects, parameters, memberships); a structural-path fallback otherwise. Re-importing the same file yields identical IDs.
+- Source facts and derived facts are separate in the model, the persisted file and every output. Component typing, reverse membership indexes and similar computed values are derived facts and are recomputed from source facts on every import.
+- Persistence: the project graph is persisted in the session work-directory as `project-graph.json` (written atomically); `session-state.yaml` keeps only the import metadata, the fingerprint and the import summary.
+- Refresh: the project refresh check compares existence, mtime, size and the SHA-256 fingerprint; a changed project is re-imported and the graph rewritten.
+- Defensive parsing: the `.knxproj` is untrusted input. No archive entry is extracted to disk; archive size, entry count and compression-ratio limits apply; XML with a DTD or entities is rejected.
 
 ### 4. Trace interpretation service
 
@@ -185,6 +197,7 @@ flowchart LR
 
 - Entities: installation, line, area, component, communication object, group address, group membership, parameter, scene, topology connection.
 - Required qualities: stable IDs, source provenance, and import warnings.
+- Source facts and derived facts are stored separately (story 04). Persisted as `project-graph.json` in the work-directory. Node kinds, field lists, ID rules, warning codes and limits: `docs/implementation/003-proposed-capability-apis.md`, section "Project import and project graph (story 04)".
 
 ### Session state
 
@@ -193,7 +206,7 @@ flowchart LR
 - `session-state.yaml` is the canonical persisted session metadata file.
 - A `.knxproj` file is mandatory when starting a session.
 - The session stores the full absolute path of that `.knxproj` file as its bound source project path.
-- Initial required session-state fields include `session_label`, active setup, work-directory path, bound source project absolute path, creation metadata, imported project metadata (path, mtime, size, import time and a fingerprint field that stays `null` until the fingerprint-based refresh check of `development/todos/04-knxproj-import-and-setup-inspection.md`), active artifact references, log-book references, and mutation references.
+- Initial required session-state fields include `session_label`, active setup, work-directory path, bound source project absolute path, creation metadata, imported project metadata (path, mtime, size, import time, the SHA-256 fingerprint of the `.knxproj` bytes since story 04, the import summary, a capped list of import warnings and a reference to `project-graph.json`), active artifact references, log-book references, and mutation references.
 
 ### Environment model and KNX system state
 
@@ -247,10 +260,10 @@ flowchart LR
 
 ## Risks and constraints
 
-- `.knxproj` format coverage may vary by ETS version and exported content.
+- `.knxproj` format coverage may vary by ETS version and exported content. Decided by story 04: ETS 6 Professional only; open question 1 is answered for `.knxproj` (trace formats remain open, todo 05).
 - Trace decoding quality depends on address resolution, datapoint typing, and packet completeness.
 - Session persistence must stay inspectable and file-based, so session metadata should remain YAML-first unless a later reviewed change justifies another backing store.
-- Project refresh checks should be lightweight and reliable enough to run before every surface call, likely via stored path, mtime, size, and later content fingerprinting.
+- Project refresh checks should be lightweight and reliable enough to run before every surface call, via stored path, mtime, size and the content fingerprint (SHA-256, story 04; hashing a 7.5 MB archive costs milliseconds).
 - Python package selection is constrained to dependencies with free-to-use licenses, which may exclude otherwise convenient tooling.
 - Vendor web sources can be inconsistent or legally constrained, so fetched knowledge needs caching and provenance.
 - Component behavior may depend on installer intent that is not encoded in project files.

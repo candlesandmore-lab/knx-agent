@@ -1,0 +1,58 @@
+# Stable ID rules 1-6 (003 'Stable ID rules') and the group address text formatter.
+
+ets_id:
+  - {id: device, value: "P-051B-0_DI-6", expected: "P-051B-0_DI-6", origin: ETS_ID}
+  - {id: group-address, value: "P-0001-0_GA-1159", expected: "P-0001-0_GA-1159", origin: ETS_ID}
+
+installation:
+  - {id: sample-style, folder: P-051B, stem: "0", expected: P-051B-0, origin: ETS_COMPOSITE}
+  - {id: second-file-stem, folder: P-0001, stem: "1", expected: P-0001-1, origin: ETS_COMPOSITE}
+
+composite:
+  - {id: communication-object, kind: communication_object, component: "P-051B-0_DI-6", ref: "O-23_R-113", expected: "P-051B-0_DI-6/co/O-23_R-113", origin: ETS_COMPOSITE}
+  - {id: parameter, kind: parameter, component: "P-051B-0_DI-6", ref: "M-0083_A-0028-34-2692_P-14000_R-14000", expected: "P-051B-0_DI-6/pa/M-0083_A-0028-34-2692_P-14000_R-14000", origin: ETS_COMPOSITE}
+  - {id: application-program, kind: application_program, ref: "M-0083_A-0056-11-A826", expected: "M-0083_A-0056-11-A826", origin: ETS_COMPOSITE}
+
+# Rule 4: 's:' + parent id + '/' + kind + '[' + key + ']'; key = Address, else Name, else 0-based position
+fallback:
+  - {id: key-from-address, parent: "P-0001-0_L-1", kind: component, address: 7, name: Switch, position: 3, expected: "s:P-0001-0_L-1/component[7]"}
+  - {id: key-from-address-zero, parent: "P-0001-0_L-1", kind: component, address: 0, name: Coupler, position: 0, expected: "s:P-0001-0_L-1/component[0]"}
+  - {id: key-from-name, parent: "P-0001-0", kind: space, address: null, name: Hall, position: 2, expected: "s:P-0001-0/space[Hall]"}
+  - {id: key-from-position-no-name, parent: "P-0001-0", kind: scene, address: null, name: null, position: 4, expected: "s:P-0001-0/scene[4]"}
+  - {id: key-from-position-empty-name, parent: "P-0001-0", kind: scene, address: null, name: "", position: 0, expected: "s:P-0001-0/scene[0]"}
+  - {id: nested-parent, parent: "s:P-0001-0/area[1]", kind: line, address: 2, name: null, position: 0, expected: "s:s:P-0001-0/area[1]/line[2]"}
+
+# Rule 5: later colliding IDs get ~2, ~3, ... (the first claim keeps the plain ID)
+collision:
+  - {id: no-collision, claims: [a, b, c], expected: [a, b, c], collided: [false, false, false]}
+  - {id: second-claim, claims: [a, a], expected: [a, "a~2"], collided: [false, true]}
+  - {id: three-claims, claims: [a, a, a, b], expected: [a, "a~2", "a~3", b], collided: [false, true, true, false]}
+  - {id: interleaved, claims: [a, b, a, b, a], expected: [a, b, "a~2", "b~2", "a~3"], collided: [false, false, true, true, true]}
+  - {id: suffix-already-taken, claims: ["a~2", a, a], expected: ["a~2", a, "a~3"], collided: [false, false, true]}
+
+# Rule 6: nodes sorted by (kind, id)
+ordering:
+  - id: kind-then-id
+    nodes: [{kind: line, id: L-2}, {kind: area, id: A-9}, {kind: line, id: L-1}, {kind: area, id: A-10}]
+    expected: [A-10, A-9, L-1, L-2]   # plain string order of ids inside one kind
+  - id: kind-order-is-alphabetical
+    nodes: [{kind: space, id: x}, {kind: component, id: x}, {kind: area, id: x}]
+    expected_kinds: [area, component, space]
+
+# Group address text per GroupAddressStyle: ThreeLevel main(5 bits)/middle(3 bits)/sub(8 bits),
+# TwoLevel main(5 bits)/sub(11 bits), Free the plain number.
+group_address_format:
+  - {id: three-level-zero, raw: 0, style: ThreeLevel, expected: "0/0/0"}
+  - {id: three-level-simple, raw: 1, style: ThreeLevel, expected: "0/0/1"}
+  - {id: three-level-sample-like, raw: 41216, style: ThreeLevel, expected: "20/1/0"}
+  - {id: three-level-max, raw: 65535, style: ThreeLevel, expected: "31/7/255"}
+  - {id: three-level-middle, raw: 2304, style: ThreeLevel, expected: "1/1/0"}
+  - {id: two-level, raw: 41216, style: TwoLevel, expected: "20/256"}
+  - {id: two-level-max, raw: 65535, style: TwoLevel, expected: "31/2047"}
+  - {id: free, raw: 41216, style: Free, expected: "41216"}
+  - {id: unknown-style-defaults-to-three-level, raw: 2305, style: null, expected: "1/1/1"}
+
+individual_address:
+  - {id: complete, area: 1, line: 2, device: 3, expected: "1.2.3"}
+  - {id: coupler, area: 1, line: 0, device: 0, expected: "1.0.0"}
+  - {id: unknown-part, area: 1, line: null, device: 3, expected: null}

@@ -1,0 +1,178 @@
+# Re-import changes and invalidated references computed by domain.graph_diff from two compact graph descriptions
+# (no archives needed). Graph description:
+#   components: [{id, name, individual_address, address, product_ref_id, application_program_id, parameters: {ref: value},
+#                 group_addresses: [group address ids linked through one communication object each]}]
+#   group_addresses: [{id, address_raw, address, name, description, datapoint_type}]
+# Omitted component fields default to null/empty; omitted names default to the id.
+# expected_changes: list of {entity, change, id, label, [changed_fields, old, new]} in result order
+# (sorted by entity, then id). expected_invalidated: list of reference objects in result order.
+
+defaults:
+  component: {name: Sensor, individual_address: "1.1.1", address: 1}
+  group_address: {address_raw: 1, address: "0/0/1", name: Light}
+
+cases:
+  - id: nothing-changed
+    old: &base
+      components: [{id: DI-1, name: Sensor, individual_address: "1.1.1", parameters: {P1: "5"}, group_addresses: [GA-1]}]
+      group_addresses: [{id: GA-1, address_raw: 1, address: "0/0/1", name: Light}]
+    new: *base
+    expected_changes: []
+  - id: component-added
+    old: {components: [], group_addresses: []}
+    new: {components: [{id: DI-1, name: Sensor, individual_address: "1.1.1"}], group_addresses: []}
+    expected_changes:
+      - {entity: component, change: added, id: DI-1, label: "Sensor (1.1.1)", details: {}}
+  - id: component-removed
+    old: {components: [{id: DI-1, name: Sensor, individual_address: "1.1.1"}], group_addresses: []}
+    new: {components: [], group_addresses: []}
+    expected_changes:
+      - {entity: component, change: removed, id: DI-1, label: "Sensor (1.1.1)", details: {}}
+  - id: component-renamed
+    old: {components: [{id: DI-1, name: Sensor, individual_address: "1.1.1"}]}
+    new: {components: [{id: DI-1, name: Switch, individual_address: "1.1.1"}]}
+    expected_changes:
+      - entity: component
+        change: changed
+        id: DI-1
+        label: "Switch (1.1.1)"
+        details: {changed_fields: [name], old: {name: Sensor}, new: {name: Switch}}
+  - id: component-several-fields
+    old: {components: [{id: DI-1, name: Sensor, individual_address: "1.1.1", application_program_id: A1, address: 1}]}
+    new: {components: [{id: DI-1, name: Sensor, individual_address: "1.1.2", application_program_id: A2, address: 2}]}
+    expected_changes:
+      - entity: component
+        change: changed
+        id: DI-1
+        label: "Sensor (1.1.2)"
+        details:
+          changed_fields: [address, application_program_id, individual_address]
+          old: {address: 1, application_program_id: A1, individual_address: "1.1.1"}
+          new: {address: 2, application_program_id: A2, individual_address: "1.1.2"}
+  - id: parameter-value-changed
+    old: {components: [{id: DI-1, name: Sensor, individual_address: "1.1.1", parameters: {P1: "5", P2: "7"}}]}
+    new: {components: [{id: DI-1, name: Sensor, individual_address: "1.1.1", parameters: {P1: "6", P2: "7"}}]}
+    expected_changes:
+      - entity: component
+        change: changed
+        id: DI-1
+        label: "Sensor (1.1.1)"
+        details:
+          changed_fields: [parameters]
+          old: {parameters: {P1: "5"}}
+          new: {parameters: {P1: "6"}}
+  - id: parameter-added-and-removed
+    old: {components: [{id: DI-1, name: Sensor, individual_address: "1.1.1", parameters: {P1: "5", P2: "7"}}]}
+    new: {components: [{id: DI-1, name: Sensor, individual_address: "1.1.1", parameters: {P2: "7", P3: "1"}}]}
+    expected_changes:
+      - entity: component
+        change: changed
+        id: DI-1
+        label: "Sensor (1.1.1)"
+        details:
+          changed_fields: [parameters]
+          old: {parameters: {P1: "5", P3: null}}
+          new: {parameters: {P1: null, P3: "1"}}
+  - id: linked-group-addresses-changed
+    old:
+      components: [{id: DI-1, name: Sensor, individual_address: "1.1.1", group_addresses: [GA-1]}]
+      group_addresses: [{id: GA-1}, {id: GA-2}]
+    new:
+      components: [{id: DI-1, name: Sensor, individual_address: "1.1.1", group_addresses: [GA-1, GA-2]}]
+      group_addresses: [{id: GA-1}, {id: GA-2}]
+    expected_changes:
+      - entity: component
+        change: changed
+        id: DI-1
+        label: "Sensor (1.1.1)"
+        details: {changed_fields: [group_addresses], old: {group_addresses: [GA-1]}, new: {group_addresses: [GA-1, GA-2]}}
+  - id: group-address-added
+    old: {group_addresses: []}
+    new: {group_addresses: [{id: GA-1, address: "0/0/1", name: Light}]}
+    expected_changes:
+      - {entity: group_address, change: added, id: GA-1, label: "0/0/1 Light", details: {}}
+  - id: group-address-removed
+    old: {group_addresses: [{id: GA-1, address: "0/0/1", name: Light}]}
+    new: {group_addresses: []}
+    expected_changes:
+      - {entity: group_address, change: removed, id: GA-1, label: "0/0/1 Light", details: {}}
+  - id: group-address-fields-changed
+    old: {group_addresses: [{id: GA-1, address_raw: 1, address: "0/0/1", name: Light, description: a, datapoint_type: DPST-1-1}]}
+    new: {group_addresses: [{id: GA-1, address_raw: 2, address: "0/0/2", name: Lamp, description: b, datapoint_type: DPST-1-2}]}
+    expected_changes:
+      - entity: group_address
+        change: changed
+        id: GA-1
+        label: "0/0/2 Lamp"
+        details:
+          changed_fields: [address_raw, datapoint_type, description, name]
+          old: {address_raw: 1, datapoint_type: DPST-1-1, description: a, name: Light}
+          new: {address_raw: 2, datapoint_type: DPST-1-2, description: b, name: Lamp}
+  - id: group-address-text-only-change-is-not-reported
+    old: {group_addresses: [{id: GA-1, address_raw: 1, address: "0/0/1", name: Light}]}
+    new: {group_addresses: [{id: GA-1, address_raw: 1, address: "1", name: Light}]}
+    expected_changes: []
+  - id: changed-id-is-removed-plus-added
+    old: {components: [{id: "s:L-1/component[1]", name: Sensor, individual_address: "1.1.1"}]}
+    new: {components: [{id: "s:L-1/component[2]", name: Sensor, individual_address: "1.1.1"}]}
+    expected_changes:
+      - {entity: component, change: removed, id: "s:L-1/component[1]", label: "Sensor (1.1.1)", details: {}}
+      - {entity: component, change: added, id: "s:L-1/component[2]", label: "Sensor (1.1.1)", details: {}}
+  - id: sorted-by-entity-then-id
+    old: {components: [], group_addresses: []}
+    new:
+      components: [{id: DI-2, name: B, individual_address: "1.1.2"}, {id: DI-1, name: A, individual_address: "1.1.1"}]
+      group_addresses: [{id: GA-2, address: x, name: n}, {id: GA-1, address: y, name: m}]
+    expected_changes:
+      - {entity: component, change: added, id: DI-1, label: "A (1.1.1)", details: {}}
+      - {entity: component, change: added, id: DI-2, label: "B (1.1.2)", details: {}}
+      - {entity: group_address, change: added, id: GA-1, label: "y m", details: {}}
+      - {entity: group_address, change: added, id: GA-2, label: "x n", details: {}}
+
+  # invalidated references
+  - id: scenario-state-names-removed-component
+    old: {components: [{id: DI-1}, {id: DI-2}]}
+    new: {components: [{id: DI-2}]}
+    scenario_state: [{component_id: DI-1, value: 1}, {component_id: DI-2, value: 2}]
+    expected_invalidated:
+      - {reference_kind: scenario_state, owner: "0", component_id: DI-1, group_address_id: null, reason: COMPONENT_REMOVED}
+  - id: component-ids-list
+    old: {components: [{id: DI-1}, {id: DI-2}, {id: DI-3}]}
+    new: {components: [{id: DI-2}]}
+    scenario_state: [{note: ignored}, {component_ids: [DI-1, DI-2, DI-3]}]
+    expected_invalidated:
+      - {reference_kind: scenario_state, owner: "1", component_id: DI-1, group_address_id: null, reason: COMPONENT_REMOVED}
+      - {reference_kind: scenario_state, owner: "1", component_id: DI-3, group_address_id: null, reason: COMPONENT_REMOVED}
+  - id: group-address-removed-in-scenario-state
+    old: {group_addresses: [{id: GA-1}, {id: GA-2}]}
+    new: {group_addresses: [{id: GA-2}]}
+    scenario_state: [{group_address_id: GA-1}, {group_address_id: GA-2}]
+    expected_invalidated:
+      - {reference_kind: scenario_state, owner: "0", component_id: null, group_address_id: GA-1, reason: GROUP_ADDRESS_REMOVED}
+  - id: mutation-owner-is-the-mutation-name
+    old: {components: [{id: DI-1}], group_addresses: [{id: GA-1}]}
+    new: {components: [], group_addresses: []}
+    mutations:
+      - {name: dim-living-room, component_id: DI-1, group_address_id: GA-1}
+      - {component_id: DI-1}
+    expected_invalidated:
+      - {reference_kind: mutation_delta, owner: dim-living-room, component_id: DI-1, group_address_id: null, reason: COMPONENT_REMOVED}
+      - {reference_kind: mutation_delta, owner: dim-living-room, component_id: null, group_address_id: GA-1, reason: GROUP_ADDRESS_REMOVED}
+      - {reference_kind: mutation_delta, owner: "1", component_id: DI-1, group_address_id: null, reason: COMPONENT_REMOVED}
+  - id: ids-never-in-the-old-graph-are-ignored
+    old: {components: [{id: DI-1}]}
+    new: {components: [{id: DI-1}]}
+    scenario_state: [{component_id: DI-99}, {group_address_id: GA-99}]
+    mutations: [{name: m, component_id: DI-77}]
+    expected_invalidated: []
+  - id: still-present-ids-are-not-invalidated
+    old: {components: [{id: DI-1}], group_addresses: [{id: GA-1}]}
+    new: {components: [{id: DI-1}], group_addresses: [{id: GA-1}]}
+    scenario_state: [{component_id: DI-1, group_address_id: GA-1}]
+    expected_invalidated: []
+  - id: non-mapping-entries-and-wrong-types-are-ignored
+    old: {components: [{id: DI-1}]}
+    new: {components: []}
+    scenario_state: ["text", 5, null, {component_id: 7}, {component_ids: "DI-1"}]
+    mutations: ["x"]
+    expected_invalidated: []

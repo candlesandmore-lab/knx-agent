@@ -8,10 +8,13 @@ import shutil
 from pathlib import Path
 
 from knx_agent.contracts import SESSION_LABEL_EXISTS, LogLevel, error
-from knx_agent.domain import ProjectImport, SessionState
+from knx_agent.domain import SessionState
 
-from .knxproj_guard import inspect_project
+from .graph_store import write_graph
+from .import_support import log_import_started, log_import_warnings, project_import_from
+from .knxproj_guard import stat_project
 from .log_book import SessionLogBook, utc_now
+from .project_importer import import_project
 from .session_paths import (
     find_work_directory,
     read_state,
@@ -33,7 +36,8 @@ class SessionLifecycle:
         """Create a session. Order: label, readability, archive, uniqueness; atomic via temp folder."""
         label = require_label_for_create(session_label)
         project = Path(project_path).expanduser().resolve()
-        info = inspect_project(project)  # PROJECT_FILE_UNREADABLE, then PROJECT_PARSE_ERROR
+        _mtime, size = stat_project(project)  # PROJECT_FILE_UNREADABLE
+        result = import_project(project)  # PROJECT_FILE_UNREADABLE, then PROJECT_PARSE_ERROR
         final = self.session_root / label
         self._ensure_free(final, label)
         self.session_root.mkdir(parents=True, exist_ok=True)
@@ -46,22 +50,29 @@ class SessionLifecycle:
                 created_at=now,
                 work_directory=str(final),
                 source_project_absolute_path=str(project),
-                project_import=ProjectImport(
-                    path=str(project),
-                    mtime=info.mtime_ns,
-                    size=info.size,
-                    imported_at=now,
-                    project_import_summary=info.summary,
-                ),
+                project_import=project_import_from(result, str(project), now),
             )
+            write_graph(temp, result.graph)
             write_state(temp, state)
             SessionLogBook.initialise(temp)
-            entry_id = SessionLogBook(temp, log_level).write(
+            log_book = SessionLogBook(temp, log_level)
+            # The folder (and so the log book) exists only after the import; its entries are written now, in order.
+            log_import_started(log_book, "create_session", state.active_setup, str(project), size)
+            log_import_warnings(log_book, "create_session", state.active_setup, result.warnings)
+            entry_id = log_book.write(
                 "INFO",
                 "create_session",
                 state.active_setup,
                 "Session created",
-                {"session_label": label, "project_path": str(project), "work_directory": str(final)},
+                {
+                    "session_label": label,
+                    "project_path": str(project),
+                    "work_directory": str(final),
+                    "fingerprint": result.fingerprint,
+                    "node_counts": result.summary.node_counts,
+                    "warning_total": len(result.warnings),
+                    "duration_s": result.duration_s,
+                },
             )
             self._ensure_free(final, label)
             try:

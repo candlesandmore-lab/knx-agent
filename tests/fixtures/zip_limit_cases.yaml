@@ -1,0 +1,61 @@
+# Archive limits with LOWERED ArchiveLimits per case (no gigabyte archives are built).
+# Keys: id, limits (max_entries, max_entry_bytes, max_total_bytes, max_compression_ratio), mutations,
+# expected_reason (PROJECT_PARSE_ERROR details.reason) or expected_ok: true (boundary: exactly at the limit passes).
+# 'Exceeds' means strictly greater. Archive-level failures stay PROJECT_PARSE_ERROR even for OPTIONAL entries.
+
+cases:
+  - id: entries-over-limit
+    limits: {max_entries: 10}
+    mutations: [{op: many_entries, count: 20}]
+    expected_reason: ARCHIVE_TOO_MANY_ENTRIES
+  - id: entries-at-limit-ok
+    limits: {max_entries: 7}   # the valid default archive has exactly 7 entries (asserted by a test)
+    expected_ok: true
+  - id: entries-one-over-limit
+    limits: {max_entries: 6}
+    expected_reason: ARCHIVE_TOO_MANY_ENTRIES
+  - id: entry-too-large
+    limits: {max_entry_bytes: 100000}
+    mutations: [{op: big_entry, name: P-0001/blob.bin, size: 100001}]
+    expected_reason: ARCHIVE_ENTRY_TOO_LARGE
+    expected_entry: P-0001/blob.bin
+  - id: entry-at-limit-ok
+    limits: {max_entry_bytes: 100000}
+    mutations: [{op: big_entry, name: P-0001/blob.bin, size: 100000}]
+    expected_ok: true
+  - id: optional-entry-too-large
+    limits: {max_entry_bytes: 100000}
+    mutations: [{op: big_entry, name: M-0001/optional.bin, size: 100001}]
+    expected_reason: ARCHIVE_ENTRY_TOO_LARGE
+    expected_entry: M-0001/optional.bin
+  - id: total-too-large
+    limits: {max_total_bytes: 150000}
+    mutations: [{op: big_entry, name: P-0001/blob.bin, size: 150000}]
+    expected_reason: ARCHIVE_TOTAL_TOO_LARGE
+  - id: compression-ratio-over-limit
+    limits: {max_compression_ratio: 100}
+    mutations: [{op: ratio_entry, name: P-0001/zeros.bin, size: 200000}]
+    expected_reason: ARCHIVE_COMPRESSION_RATIO
+    expected_entry: P-0001/zeros.bin
+  - id: optional-entry-compression-ratio
+    limits: {max_compression_ratio: 100}
+    mutations: [{op: ratio_entry, name: M-0001/zeros.bin, size: 200000}]
+    expected_reason: ARCHIVE_COMPRESSION_RATIO
+  - id: duplicate-required-entry
+    mutations: [{op: duplicate, entry: zero_xml}]
+    expected_reason: ARCHIVE_DUPLICATE_ENTRY
+    expected_entry: P-0001/0.xml
+  - id: duplicate-optional-entry
+    mutations: [{op: duplicate, entry: hardware_xml}]
+    expected_reason: ARCHIVE_DUPLICATE_ENTRY
+  - id: encrypted-optional-entry
+    mutations: [{op: encrypt, entry: hardware_xml}]
+    expected_reason: ENCRYPTED
+    expected_entry: M-0001/Hardware.xml
+  # default limits, real archives
+  - id: default-limits-5001-entries
+    mutations: [{op: many_entries, count: 5001}]
+    expected_reason: ARCHIVE_TOO_MANY_ENTRIES
+  - id: default-limits-highly-compressible-entry
+    mutations: [{op: ratio_entry, name: M-0001/zeros.bin, size: 3000000}]
+    expected_reason: ARCHIVE_COMPRESSION_RATIO

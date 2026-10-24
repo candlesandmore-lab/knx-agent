@@ -1,0 +1,142 @@
+schema_version: 1
+story:
+  id: 4
+  title: "Import .knxproj into a normalized project graph and integrate it into session creation and refresh"
+  state: implemented
+  created_on: "2026-10-24"
+  last_updated_on: "2026-10-24"
+  source_todo:
+    - "development/todos/04-knxproj-import-and-setup-inspection.md"
+  actor: "End user (domain expert investigating an ETS 6 Professional KNX installation)"
+  goal: "Parse an ETS 6 Professional .knxproj file with an own parser into a normalized project graph with stable IDs, provenance, import warnings and component typing, keeping source facts separate from derived facts, persist it in the session work-directory, and use it in create_session, reimport_system_definition and describe_session (richer project_import_summary, real changes and invalidated_references, fingerprint-based refresh check). The query capabilities summarize_topology, list_components, describe_component and trace_group_flow are a later story (story B of todo 04) and are not part of this one."
+  success_criteria:
+    - "An own parser (lxml or ElementTree; no runtime dependency on xknxproject) imports tests/lifedata/20261010-EFH-Armbruster.knxproj (ETS 6 Professional, ToolVersion 6.1.5686.0, schema namespace http://knx.org/xml/project/22) into a project graph covering installation, areas, lines, components, communication objects, group addresses, memberships, parameters, scenes (when present), and topology/spaces. Each node has a stable ID, provenance and, for components, a component type; source facts and derived facts are stored and exposed separately. Large application program XMLs (up to 50 MB) are read by streaming (iterparse) and only for application programs referenced by components; the import of the sample takes at most 30 seconds as target (measured and recorded in the implementation notes) and a test asserts a bound of 120 seconds; peak memory is measured once and documented, not asserted."
+    - "Re-importing the same .knxproj yields identical stable IDs (ETS Id attributes such as P-051B-0_DI-6 where present, a deterministic fallback from the structural path otherwise). A golden-count regression test and a dev-time-only cross-check against xknxproject (GPL-2.0; dev dependency group only, never a runtime dependency, no code copied; golden counts as the fallback if install or license is a problem) compare component, group address and communication object counts and addresses for the sample."
+    - "create_session, reimport_system_definition and describe_session on SDK, CLI and MCP use the real import: the graph is persisted in the work-directory; project_import_summary reports real counts; import warnings (code, message, location = zip entry or XML element id) are surfaced as limitation_notes and counted in the summary; reimport_system_definition returns real changes (components, group addresses added/removed/changed) and invalidated_references; no new capability, CLI command or MCP tool is added."
+    - "project_import.fingerprint becomes a real content hash of the .knxproj and the refresh check uses it in addition to path, mtime and size, so a content change that keeps mtime and size is detected (closes the story 03 limitation). Password-protected (encrypted) and non-ETS-6 projects (other namespace or ToolVersion major not 6) fail with PROJECT_PARSE_ERROR naming the reason in details; a malformed project.xml or 0.xml fails with PROJECT_PARSE_ERROR; a malformed optional part (for example one unreadable catalog XML) lets the import continue with a warning. The parser defends against hostile archives: it never extracts files to disk and fails with PROJECT_PARSE_ERROR (reason in details) when an archive exceeds 5000 entries, 256 MiB for one entry, 1 GiB total uncompressed size, or a compression ratio of 200 for one entry, and when a required part (project.xml or 0.xml) contains a DTD, external entity, entity expansion or a non-UTF-8 encoding (XML parsers are configured with entity resolution, network access and huge trees disabled). The same content in an optional part (manufacturer catalog, application program XML, knx_master.xml) does NOT fail the import: that part is skipped, never parsed or partially used, and a warning OPTIONAL_PART_UNREADABLE (reason XML_DTD_FORBIDDEN, XML_ENTITY_FORBIDDEN or XML_ENCODING_UNSUPPORTED) is reported (user decision 2026-10-24). Tests cover the zip limits, an entity-expansion file and a DTD in 0.xml (PROJECT_PARSE_ERROR) and in an optional part (warning, import continues, part not used)."
+    - "Component typing is stored as a derived fact (classified from product/application reference and communication object datapoint types), never as a source fact; purpose annotation is out of scope (todo 14). Pytest uses data-driven YAML fixtures plus small synthetic .knxproj archives built in tmp_path for fast tests, and sample-based tests that skip with a clear message when tests/lifedata/20261010-EFH-Armbruster.knxproj is absent."
+  architecture_options:
+    - id: arch-a
+      label: "Layered importer, graph model and derivation (chosen)"
+      description: "A parser layer reads the .knxproj zip and XML into a normalized graph (domain model); a derivation layer computes derived facts (component typing, memberships indexes); the session service persists and loads the graph. The query layer is a later story."
+      trade_offs: "Keeps source and derived facts separate and is easy to test; needs an explicit graph schema. CHOSEN (internal structure, decision 2026-10-24)."
+    - id: arch-b
+      label: "Single-pass importer producing flat tables"
+      description: "The parser emits flat per-entity records with foreign keys."
+      trade_offs: "Simpler, but topology traversal is harder and the source/derived separation is weaker. NOT chosen."
+  implementation_options:
+    - id: impl-a
+      label: "lxml parser with iterparse for large files"
+      description: "lxml with namespace http://knx.org/xml/project/22 and iterparse/XPath for the big application program XMLs."
+      trade_offs: "Fast, XPath, streaming; adds a native BSD-3-Clause dependency (formal license record in todo 12; the license is noted in README.md in this story). Preferred; the architect measures both options on the sample at planning and records the final choice."
+    - id: impl-b
+      label: "xml.etree.ElementTree (stdlib) with iterparse"
+      description: "No extra dependency."
+      trade_offs: "No new dependency, but slower and fewer features on 50 MB files; chosen instead of lxml only if its measured import time on the sample meets the 30 second target."
+    - id: impl-c
+      label: "Stable IDs from ETS Id attributes with structural-path fallback (chosen)"
+      description: "Use the ETS Id attribute where present and a deterministic fallback otherwise."
+      trade_offs: "IDs are stable across re-imports of the same file; fallback IDs change if the structure changes. CHOSEN (internal)."
+    - id: impl-d
+      label: "Graph persistence as YAML or JSON in the work-directory"
+      description: "A serialised graph file (for example project-graph.json) next to session-state.yaml, written atomically."
+      trade_offs: "Simple and inspectable; format and size decided at planning (the sample graph is small compared to the 7.5 MB archive)."
+  repository_context:
+    branch: story/04-knxproj-import-and-project-graph
+    base_commit: 6275bd0
+  current_implementation:
+    notes: "Stories 02 and 03 are implemented (development/backlog/implemented): src/knx_agent with KnxSessionClient, SessionService, ProjectRefreshGuard, application/knxproj_guard.py (zip validity check only), session-state.yaml with project_import (fingerprint null, placeholder project_import_summary with a limitation note), the KNX session log book, ERROR logging via Python logging, session root. Sample facts (tests/lifedata/20261010-EFH-Armbruster.knxproj, 7.5 MB, 82 zip entries): project folder P-051B with project.xml and 0.xml (28 DeviceInstance, 695 GroupAddress, 692 ComObjectInstanceRef, 3132 ParameterInstanceRef, 21 Space, 2 Area, 3 Line, 96 Node), manufacturer catalog folders M-0083, M-0008, M-01A0 with application program XMLs (largest 50 MB), knx_master.xml with datapoint types; ProjectTrace elements in project.xml are ETS change history, not bus traces. User decisions (2026-10-24): ETS 6 Professional only; own parser; xknxproject only as test cross-check; the sample file is committed to git."
+    implementation_notes:
+      - "T1 benchmark (scripts/benchmark_knxproj_parse.py, 3 cold runs, stdlib ElementTree iterparse): median 0.94 s (0.951 / 0.921 / 0.940), peak RSS 31.6 to 32.5 MiB; the 50 MB program takes 0.574 s. Decision: impl-b (stdlib) stands, lxml not needed and not installed. Details in docs/implementation/003 'Measured results'."
+      - "Phase B (T9 to T13): application/project_importer.py (import_project, fingerprint, summary; writes nothing) and application/import_support.py (persisted project_import shape, log points, limitation notes); ProjectRefreshGuard compares existence, mtime, size, fingerprint and writes project-graph.json before session-state.yaml; SessionLifecycle.create writes graph, state and log book into the temporary folder; the story 03 placeholders (limitation_note, LIMITATION_NOTE, inspect_project) are removed and the story 03 tests run on valid ETS 6 archives built by tests/knxproj_builder.py. Sample end to end (create_session): median 1.18 s (target 30 s, bound 120 s), peak RSS about 83 MiB, project-graph.json 3.2 MB (indent stays 1); impl-b stands. xknxproject cross-check passes (addresses equal; object counts equal per component on objects with memberships). Full interpretations in docs/implementation/003 'Implementation notes (T9 to T13)'."
+    relevant_files:
+      - "docs/architecture/001-knx-investigation-platform.md"
+      - "docs/implementation/003-proposed-capability-apis.md"
+      - "src/knx_agent/application/knxproj_guard.py"
+      - "src/knx_agent/application/project_refresh_guard.py"
+      - "src/knx_agent/domain/session_state.py"
+      - "tests/lifedata/20261010-EFH-Armbruster.knxproj"
+    depends_on_stories:
+      - "development/backlog/implemented/02-package-skeleton-and-core-api.yaml"
+      - "development/backlog/implemented/03-session-service-and-project-refresh.yaml"
+  guidelines:
+    - "Support ETS 6 Professional projects only; do not add handling for other ETS versions unless the user decides otherwise."
+    - "The runtime parser is our own; xknxproject (GPL-2.0, repository LICENSE is MIT) is a dev-group cross-check only."
+    - "Canonical terms (docs/methodology/02-terminology-dictionary.md): component (device only inside ETS XML element names such as DeviceInstance), project graph, source fact, derived fact, component typing, KNX system setup, session root, work-directory. ETS id means the Id attribute of ETS XML elements."
+    - "Source facts and derived facts stay separate in the model, the persisted graph and every output."
+    - "Do not implement list_components, describe_component, summarize_topology or trace_group_flow here; do not implement purpose annotation (todo 14) or bus traces (todo 05)."
+    - "Layering cli/adapters -> sdk -> application -> domain stays; graph model in domain, parser and derivation in application (infrastructure-style modules), no environment variables."
+    - "Parsing must be defensive: untrusted archive (zip bomb limits, path traversal never extracts files to disk, XML entity expansion disabled)."
+    - "Data-driven YAML fixtures and synthetic .knxproj archives for fast tests; sample-based tests skip when the file is absent; README documents the fixtures and the sample."
+    - "Record lxml (and any other new dependency) in the license record (todo 12)."
+    - "Decision owner: architect-planning-agent decides impl-a vs impl-b (by measuring both on the sample) and impl-d (default if undecided: JSON file project-graph.json, written atomically) at planning and records each decision with options and rationale in docs/implementation/003 (project import section) and in the task plan."
+    - "Definitions for tests: compression ratio = uncompressed size divided by compressed size of ONE zip entry; required parts = the project folder's project.xml and 0.xml (failure = PROJECT_PARSE_ERROR); optional parts = manufacturer catalog and application program XMLs, knx_master.xml, UserFiles, AddinData and BinaryData (failure = warning, and facts derived from them, for example datapoint types, are reported as limitation notes). Golden counts for the sample are stored as a user-editable fixture tests/fixtures/sample_project_counts.yaml; the measured import time and peak memory are recorded in the docs/implementation/003 project import section."
+    - "Terminology: 'capability' = a catalogue entry of docs/implementation/003; 'operation' is not used as a synonym. 'fingerprint' = SHA-256 of the .knxproj file bytes (field project_import.fingerprint); 'content hash' is not used. 'Project graph' is the only term for the normalized model. 'work-directory' is the dictionary term. The dev-time cross-check tool is called xknxproject everywhere. Todo paths are accepted follow-up ids per the Shipped-Asset Alignment rule (concrete todo id) and convert to story ids when backlog stories are created."
+  impact_analysis:
+    methodology: "unchanged (a new canonical term is added only after user confirmation per the Maintenance Rule)"
+    architecture: "updated"
+    implementation: "updated"
+    updated_documents: "architecture: docs/architecture/001-knx-investigation-platform.md section 3 (KNX system model): ETS 6 only, own parser, stable IDs, source/derived separation, persistence, fingerprint refresh. implementation: docs/implementation/003-proposed-capability-apis.md (project import, project graph, fingerprint refresh, summary fields, warnings), src/knx_agent, tests, README.md, pyproject.toml and uv.lock (lxml; xknxproject in the dev group)."
+    solution_surface: "top_level_runtime: instructed; subagent_topology: instructed_agent_only (no coded sub-agent; Python package built by python-creation-agent)."
+    phase_owners: "story drafting - story-telling-agent; architecture, spec and task plan - architect-planning-agent; Python implementation - python-creation-agent; review - review-validation-agent; validation - qa-agent."
+    invocation_surfaces: "SDK, CLI and MCP: no new capability; the existing capabilities create_session, reimport_system_definition and describe_session on all three surfaces gain the real import; none omitted."
+  shipped_asset_alignment:
+    - asset: "coded-agent doc snapshots (src/agent_building_agent/docs/) of docs/architecture/001 and docs/implementation/003"
+      decision: not_applicable
+      rationale: "No coded agent lists these documents in its DOC_RELATIVE_PATHS."
+      follow_up_story_id: null
+    - asset: "instructed-agents/agents/* and skill markdown"
+      decision: not_applicable
+      rationale: "None embed or quote the KNX system model or project import sections."
+      follow_up_story_id: null
+    - asset: "knx-agent agent-layer prompts and skills (src/knx_agent/agent_layer)"
+      decision: deferred
+      rationale: "Only an empty placeholder package exists; prompts and skills that use the import and its warnings are created in todo 11."
+      follow_up_story_id: "development/todos/11-agent-layer.md"
+  development_cycle:
+    steps:
+      - "Verify story branch story/04-knxproj-import-and-project-graph and confirm the persisted story file in development/backlog/active."
+      - "Architecture update (section 3) and implementation-spec update (graph model, stable IDs, warnings contract, fingerprint rule, summary fields, persistence)."
+      - "Solution-surface classification and task plan; consolidated review gate."
+      - "Implement domain graph model and derivation (component typing), the ETS 6 parser with streaming for large files and defensive limits, warnings and unsupported-input errors."
+      - "Persist and load the graph in the work-directory; integrate into SessionService, ProjectRefreshGuard (fingerprint) and the create/reimport/describe responses on SDK, CLI and MCP."
+      - "pytest with data-driven fixtures, synthetic archives, sample-based tests, golden counts and the dev-time xknxproject cross-check; README update."
+      - "QA, implementation review gate, final alignment validation."
+    validation:
+      completed_on: "2026-10-24"
+      gates:
+        - "Story review passed (round 2 after revision of round 1)."
+        - "Consolidated gate (steps 5-8) passed with deferred follow-up (round 2); the spec was tightened afterwards (referenced application program P1/P2, optional vs required parts, component typing CT0-CT4, terms)."
+        - "Implementation gate passed with deferred follow-up (the review agent cannot read files; context was supplied inline)."
+        - "Final alignment verified by the calling agent against the surfaces below."
+      executable_evidence:
+        - "pytest via MCP pytest_execution: 628 passed; with the sample file temporarily hidden 617 passed and 11 sample-based tests skipped with a clear message (file restored, size unchanged)."
+        - "qa-agent task qa-story-04-round-1: pass_fail_result yaml_validation=pass, pytest=pass (14 YAML files)."
+        - "Sample: create_session median 1.18 s, peak RSS 83-86 MiB (documented), project-graph.json 3.2 MB; xknxproject 3.10.0 cross-check equal for individual and group addresses and for linked communication objects per component."
+      impact_surface_verification:
+        methodology: "unchanged - no new canonical term was introduced; the dictionary rows Project graph, Source fact, Derived fact, Component typing, Session root are used."
+        architecture: "updated (clarification) - docs/architecture/001-knx-investigation-platform.md section 3 and the story_04_clarification entry."
+        implementation: "updated - docs/implementation/003-proposed-capability-apis.md (Project import and project graph section with Measured results and implementation notes T1-T8 and T9-T13), docs/implementation/002-bootstrap-implementation-plan.md Slice 2 note."
+        code_and_tests: "src/knx_agent domain (project_graph, derivation, graph_diff), application (knxproj_archive, knxproj_parser, graph_store, project_importer, import_support, refresh guard, lifecycle, service), contracts (import_codes, models); tests with fourteen YAML fixture files, synthetic archive builder, sample tests and the xknxproject cross-check."
+        installation_assets: "README.md (import, warnings, limits, fingerprint, sample, fixtures, skip behaviour, dependencies and license notes); pyproject.toml and uv.lock (xknxproject in the dev group only); dev scripts scripts/benchmark_knxproj_parse.py and scripts/measure_sample_import.py."
+        shipped_assets: "per shipped_asset_alignment: two not_applicable, one deferred to todo 11."
+      deviations:
+        - "The asserted import-time bound (120 s) is deliberately four times the 30 s target to avoid flaky tests on slow machines; the measured 1.18 s is recorded in docs/implementation/003. No memory threshold is asserted (measured once, documented)."
+        - "Sample-based tests need tests/lifedata/20261010-EFH-Armbruster.knxproj (committed by user decision); where it is absent they skip with a message."
+        - "Implementation deviations (extra 'Import started' DEBUG entry, corrupt graph file repaired by the next explicit reimport, program XMLs opened twice, story 03 sessions not migrated, and others) are documented in docs/implementation/003 Implementation notes."
+        - "Process: uv add --dev and uv lock ran in the terminal (no MCP tool for uv); the implementer issued two no-op Bash calls; the sample file was renamed for a few minutes to verify the skip behaviour and restored."
+    review_findings: []
+    deferred_items:
+      - item: "Story B: summarize_topology, list_components, describe_component, trace_group_flow with selectors and detail levels"
+        reason: "Todo 04 is split (user-visible note added to the todo): this story delivers todo 04; the query capabilities moved to their own todo to keep stories small."
+        follow_up: "development/todos/15-component-inspection-capabilities.md"
+      - item: "Purpose annotation"
+        reason: "Todo 14."
+        follow_up: "development/todos/14-component-purpose-annotation.md"
+      - item: "Bus trace ingestion (ETS 6 Professional bus monitor exports)"
+        reason: "Todo 05."
+        follow_up: "development/todos/05-bus-trace-ingestion.md"
+      - item: "License records for lxml and the dev-time xknxproject cross-check"
+        reason: "Todo 12."
+        follow_up: "development/todos/12-dependency-license-governance.md"
+  open_questions: []

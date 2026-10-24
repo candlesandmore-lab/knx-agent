@@ -20,9 +20,9 @@ def test_describe_session_returns_response_model(valid_case, client, project, se
     assert response.active_setup == valid_case["expected_active_setup"]
     assert response.envelope.setup == valid_case["expected_setup"]
     assert [s.kind.value for s in response.envelope.evidence_sources] == valid_case["expected_evidence_kinds"]
-    assert any(
-        valid_case["expected_limitation_note_contains"] in note for note in response.envelope.limitation_notes
-    )
+    assert response.envelope.limitation_notes == valid_case["expected_limitation_notes"]
+    assert response.project_import.fingerprint is not None and len(response.project_import.fingerprint) == 64
+    assert response.project_import.project_import_summary.node_counts["component"] == 3
     assert response.log_book_references == ["session-log-book.jsonl"]
     assert response.trace_artifacts == []
     assert [s.name for s in response.setups] == ["default"]

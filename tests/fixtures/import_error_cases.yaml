@@ -1,0 +1,89 @@
+# Import failures: archive description -> PROJECT_PARSE_ERROR details.reason (and entry where relevant).
+# Keys: id, kind (zip|not_zip|empty), patch (merged into the default description), edits (dotted path edits),
+# mutations (see tests/knxproj_builder.py), expected_reason, expected_entry (optional).
+# Aliases for entries: project_xml, zero_xml, hardware_xml, application_xml[:id], master_xml.
+
+cases:
+  - {id: not-a-zip, kind: not_zip, expected_reason: NOT_A_ZIP}
+  - {id: empty-file, kind: empty, expected_reason: NOT_A_ZIP}
+  - id: encrypted-required-entry
+    mutations: [{op: encrypt, entry: zero_xml}]
+    expected_reason: ENCRYPTED
+    expected_entry: P-0001/0.xml
+  - id: missing-project-xml
+    mutations: [{op: remove, entry: project_xml}]
+    expected_reason: PROJECT_FOLDER_NOT_FOUND
+  - id: two-project-folders
+    mutations: [{op: second_project_folder}]
+    expected_reason: PROJECT_FOLDER_NOT_FOUND
+  - id: folder-name-not-p-hex
+    mutations: [{op: rename_project_folder, to: Project-1}]
+    expected_reason: PROJECT_FOLDER_NOT_FOUND
+  - id: missing-zero-xml
+    mutations: [{op: remove, entry: zero_xml}]
+    expected_reason: REQUIRED_PART_MISSING
+    expected_entry: P-0001/0.xml
+  - id: malformed-project-xml
+    mutations: [{op: malform, entry: project_xml}]
+    expected_reason: REQUIRED_PART_MALFORMED
+    expected_entry: P-0001/project.xml
+  - id: malformed-zero-xml
+    mutations: [{op: malform, entry: zero_xml}]
+    expected_reason: REQUIRED_PART_MALFORMED
+    expected_entry: P-0001/0.xml
+  - id: empty-zero-xml
+    mutations: [{op: empty_entry, entry: zero_xml}]
+    expected_reason: REQUIRED_PART_MALFORMED
+  - id: zero-xml-without-installation
+    mutations: [{op: replace, entry: zero_xml, old: "<Installation ", new: "<Other "}, {op: replace, entry: zero_xml, old: "</Installation>", new: "</Other>"}]
+    expected_reason: REQUIRED_PART_MALFORMED
+  - id: wrong-namespace
+    edits: [{path: namespace, value: "http://knx.org/xml/project/20"}]
+    expected_reason: UNSUPPORTED_NAMESPACE
+  - id: no-namespace
+    edits: [{path: namespace, value: null}]
+    expected_reason: UNSUPPORTED_NAMESPACE
+  - id: tool-version-major-5
+    edits: [{path: tool_version, value: "5.7.1.0"}]
+    expected_reason: UNSUPPORTED_TOOL_VERSION
+  - id: tool-version-missing
+    edits: [{path: tool_version, value: null}]
+    expected_reason: UNSUPPORTED_TOOL_VERSION
+  - id: tool-version-unparsable
+    edits: [{path: tool_version, value: "six"}]
+    expected_reason: UNSUPPORTED_TOOL_VERSION
+  - id: root-element-not-knx
+    patch: {root_tag: Other}
+    expected_reason: NOT_ETS_PROJECT
+  - id: project-element-missing
+    patch: {no_project_element: true}
+    expected_reason: NOT_ETS_PROJECT
+  - id: project-id-missing
+    patch: {no_project_id: true}
+    expected_reason: NOT_ETS_PROJECT
+  # DTD, entity declaration and non-UTF-8 documents in REQUIRED parts fail the import
+  - id: doctype-in-zero-xml
+    mutations: [{op: doctype, entry: zero_xml}]
+    expected_reason: XML_DTD_FORBIDDEN
+    expected_entry: P-0001/0.xml
+  - id: entity-in-zero-xml
+    mutations: [{op: entity, entry: zero_xml}]
+    expected_reason: XML_ENTITY_FORBIDDEN
+    expected_entry: P-0001/0.xml
+  - id: utf16-zero-xml
+    mutations: [{op: utf16, entry: zero_xml}]
+    expected_reason: XML_ENCODING_UNSUPPORTED
+    expected_entry: P-0001/0.xml
+  - id: latin1-declaration-zero-xml
+    mutations: [{op: encoding_declaration, entry: zero_xml, value: iso-8859-1}]
+    expected_reason: XML_ENCODING_UNSUPPORTED
+  - id: doctype-in-project-xml
+    mutations: [{op: doctype, entry: project_xml}]
+    expected_reason: XML_DTD_FORBIDDEN
+    expected_entry: P-0001/project.xml
+  - id: entity-in-project-xml
+    mutations: [{op: entity, entry: project_xml}]
+    expected_reason: XML_ENTITY_FORBIDDEN
+  - id: utf16-project-xml
+    mutations: [{op: utf16, entry: project_xml}]
+    expected_reason: XML_ENCODING_UNSUPPORTED

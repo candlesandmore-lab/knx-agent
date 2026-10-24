@@ -126,15 +126,15 @@ CLI/SDK/MCP names were confirmed by the user (still subject to the freeze condit
 ### 1. `create_session` (UC 1-5, entry point)
 - Purpose: create an investigation session bound to a `.knxproj` path.
 - Request: `project_path` (required, path only); `session_label` (required, user-chosen, unique among sessions under the session root; non-empty, letters, digits, `-` and `_` only so it is safe as a directory name).
-- Response: `session_label` (echo), `work_directory`, `session_state_path`, `source_project_absolute_path`, `project_import_summary`, `active_setup` (`default`), envelope.
-- Evidence/limits: `KNXPROJ`; import warnings for unsupported or ambiguous data.
-- Errors: `PROJECT_FILE_UNREADABLE` (missing or unreadable file), `PROJECT_PARSE_ERROR` (not a zip archive), `SESSION_LABEL_EXISTS`, `SESSION_LABEL_INVALID`; validation order is fixed (see story 03 section). Atomic: a failed create leaves no folder.
+- Response: `session_label` (echo), `work_directory`, `session_state_path`, `source_project_absolute_path`, `project_import_summary` (fields: section "Project import and project graph (story 04)"), `active_setup` (`default`), envelope.
+- Evidence/limits: `KNXPROJ`; import warnings for unsupported or ambiguous data are returned as `limitation_notes`.
+- Errors: `PROJECT_FILE_UNREADABLE` (missing or unreadable file), `PROJECT_PARSE_ERROR` (not a zip archive, encrypted, not ETS 6, hostile archive, malformed required part; reason in `details.reason`), `SESSION_LABEL_EXISTS`, `SESSION_LABEL_INVALID`; validation order is fixed (see story 03 section). Atomic: a failed create leaves no folder.
 - Projection: CLI `knx-agent session create --project <file> --session-label <session_label> [--session-root <dir>] [--log-level <level>]`; SDK `client.create_session(project_path=..., session_label=...)` (client built as `KnxSessionClient(session_root=...)`); MCP `create_session`.
 
 ### 2. `reimport_system_definition` (UC 1, freshness)
 - Purpose: explicitly re-read the bound `.knxproj` of an existing session.
 - Request: `session_label`.
-- Response: `project_refresh_status` (`CHANGED`/`UNCHANGED`), `project_import_summary`, `changes` (components added/removed/changed), `invalidated_references` (state entries or mutation deltas pointing to vanished components), envelope.
+- Response: `project_refresh_status` (`CHANGED`/`UNCHANGED`), `project_import_summary`, `changes` (components and group addresses added/removed/changed; shape in section "Project import and project graph (story 04)"), `invalidated_references` (state entries or mutation deltas pointing to vanished components or group addresses), envelope.
 - Evidence/limits: `KNXPROJ`. Retaining or recomputing current system state after a changed project is a **(proposal)**: state is retained, invalidated references are reported as limitation notes.
 - Errors: `PROJECT_FILE_UNREADABLE`, `PROJECT_PARSE_ERROR`.
 - Projection: CLI `knx-agent session reimport --session <session_label> [--session-root <dir>] [--log-level <level>]`; SDK `client.reimport_system_definition(session_label=...)`; MCP `reimport_system_definition`.
@@ -142,7 +142,7 @@ CLI/SDK/MCP names were confirmed by the user (still subject to the freeze condit
 ### 3. `describe_session` (UC 1-5, session inspection)
 - Purpose: persisted metadata and status of a session.
 - Request: `session_label`.
-- Response: `session_label`, `work_directory`, `source_project_absolute_path`, `project_refresh`, `active_setup`, `setups` (default plus mutations, each with current system state summary), `trace_artifacts`, `log_book_references`, envelope.
+- Response: `session_label`, `work_directory`, `source_project_absolute_path`, `project_refresh`, `project_import` (story 04: `imported_at`, `fingerprint`, `graph_file`, `project_import_summary`), `active_setup`, `setups` (default plus mutations, each with current system state summary), `trace_artifacts`, `log_book_references`, envelope.
 - Errors: common only (`SESSION_NOT_FOUND`; `PROJECT_FILE_UNREADABLE` and `PROJECT_PARSE_ERROR` from the automatic refresh check). Read-only: writes no log book entry (no `log_book_entry_id`).
 - Projection: CLI `knx-agent session describe --session <session_label> [--session-root <dir>]`; SDK `client.describe_session(session_label=...)`; MCP `describe_session`.
 
@@ -296,7 +296,8 @@ proposals until the catalogue freeze.
 1. `SESSION_LABEL_INVALID`  2. `PROJECT_FILE_UNREADABLE`  3. `PROJECT_PARSE_ERROR`  4. `SESSION_LABEL_EXISTS`.
 For existing sessions: label check, `SESSION_NOT_FOUND`, then the refresh check (`PROJECT_FILE_UNREADABLE`, `PROJECT_PARSE_ERROR`).
 The `.knxproj` guard only verifies that the file is readable and a valid zip archive; content is not
-parsed (todo 04).
+parsed (todo 04). Superseded by story 04: the guard step becomes the full import; same order, and
+`PROJECT_PARSE_ERROR` now also covers the reasons listed in "Project import and project graph (story 04)".
 
 ### Atomicity
 - `create_session` builds the work-directory in a temporary sibling folder (`<session root>/.<session_label>.creating-<token>`;
@@ -316,6 +317,8 @@ explicit `reimport_system_definition` even when the result is `UNCHANGED`; never
 check, so that check is idempotent); `active_setup` (`default`); `trace_artifacts: []`;
 `scenario_state: []`; `mutations: []`; `log_book_references` (list, here `session-log-book.jsonl`);
 `mutation_log_book_references` (empty mapping).
+Story 04 replaces the `project_import` content (summary, fingerprint, graph reference, warnings): see
+"Project import and project graph (story 04)".
 
 ### Project refresh check
 Run by the application layer before every public session-scoped operation (CLI and MCP get it through
@@ -326,6 +329,9 @@ atomically), then the operation proceeds. Missing or unreadable: `PROJECT_FILE_U
 it always rewrites `project_import.imported_at`. `changes` and `invalidated_references` are empty until
 todo 04. Known limitation: a content change that keeps `mtime` and `size` is not detected by the automatic
 check (manual `reimport_system_definition`; fingerprint in todo 04).
+Superseded by story 04: the check also compares the SHA-256 fingerprint, closing this limitation; `changes`
+and `invalidated_references` are real; `project_import_summary` and `fingerprint` have the story 04 shape
+(see the next section). Sessions created by story 03 code are not migrated (recreate them).
 
 ### KNX session log book format
 Append-only JSON Lines file `session-log-book.jsonl` in the work-directory, one JSON object per line with
@@ -373,6 +379,509 @@ instead of the automatic check (no second refresh entry); a session folder with 
 logged at ERROR and re-raised unchanged; the CLI prints the Python-logging ERROR line to stderr followed by the
 `ErrorInfo` JSON as the last line; `describe_session` returns `setups` as `[{name: default,
 current_system_state_summary: unknown}]` until todo 06.
+
+## Project import and project graph (story 04)
+
+Realises capabilities 1-3 with a real `.knxproj` import. Decisions of 2026-10-24 (user: ETS 6 Professional
+only, own parser; architect: the decisions marked "architect" below). No capability, CLI command or MCP
+tool is added. Error codes remain proposals until the catalogue freeze. The query capabilities
+(`summarize_topology`, `list_components`, `describe_component`, `trace_group_flow`) are todo 15 and read the
+persisted project graph defined here.
+
+### Decisions (options and rationale)
+
+| Decision | Options | Chosen | Rationale |
+| --- | --- | --- | --- |
+| Internal structure (arch) | arch-a layered importer + graph model + derivation; arch-b flat tables | arch-a (user/story, 2026-10-24) | Source/derived separation and topology traversal. |
+| XML library (impl-a vs impl-b) | lxml iterparse; stdlib `xml.etree.ElementTree` iterparse | impl-b (stdlib) by default, binding switch rule below (architect) | Planning measurement (below) is 1 to 2 orders of magnitude inside the 30 s target; no new native dependency. lxml could not be installed during planning, so the first implementation task re-measures with the real workload and applies the rule. |
+| Stable IDs (impl-c) | ETS `Id` with structural fallback | impl-c (story) | See "Stable ID rules". |
+| Persistence (impl-d) | YAML; JSON | JSON, file `project-graph.json`, atomic write (architect) | Large and machine-read; PyYAML dumping of ~10k nodes is slow and a JSON file is still inspectable. `session-state.yaml` stays YAML-first for session metadata. |
+| Fingerprint timing | hash only on mtime/size change; hash on every check | hash on every refresh check after the cheap comparisons agree (architect) | The point of the fingerprint is to catch changes that keep mtime and size, so it cannot be gated by them. SHA-256 of 7.5 MB takes about 10 to 30 ms. |
+| Import warnings and the ERROR rule | warnings are issues (ERROR); warnings are not issues | warnings are NOT issues (architect) | The story 03 rule "any issue is ERROR" covers failures of an operation (raised catalogue errors). A warning describes the project, not a failed operation. Details: "Log points". |
+| DTD, entity or unsupported encoding in an XML part | fail the import for every part; fail for required parts and skip optional parts with a warning | required parts (`project.xml`, `0.xml`): `PROJECT_PARSE_ERROR`; optional parts: skip the part with warning `OPTIONAL_PART_UNREADABLE` (user decision, 2026-10-24) | The importer needs the required parts to build any graph; an optional part only enriches it. A rejected optional part is never parsed and no partial result of it is used (the guard rejects before the parser sees the document). |
+
+### impl-a vs impl-b: benchmark rule (binding)
+
+Planning measurement (architect, 2026-10-24, Python 3.12, macOS, stdlib `ElementTree.iterparse`, parse-only
+pass without graph building, no lxml): `tests/lifedata/20261010-EFH-Armbruster.knxproj`, 0.xml, knx_master.xml
+and all 13 application program XMLs (50 MB largest, 0.69 s): total 1.06 s, peak RSS 27 MiB. This is not the
+final number because graph building, derivation, hashing and persistence are not included.
+
+Binding rule: the FIRST implementation task (T1 of the task plan) is a benchmark. It measures the
+ElementTree streaming read of the referenced application programs and the required parts of the sample
+and records the result in this section ("Measured results" below). The default is impl-b. Switch to impl-a (lxml) only if
+the measured end-to-end import of the sample (cold interpreter, archive open to graph persisted) exceeds
+30 s. The task plan re-checks the rule once more on the finished import (T12 QA run); a breach at that point
+adds a follow-up task to switch to lxml (record the license in README.md and todo 12; BSD-3-Clause), it does
+not block the story if the 120 s test bound still holds. No lxml dependency is added while impl-b stands.
+
+Measured results (T1 filled; T12 fills the end-to-end lines): preliminary parse-only 1.06 s / 27 MiB (above).
+
+T1 benchmark (`scripts/benchmark_knxproj_parse.py`, 2026-10-24, macOS, Python 3.12, stdlib `ElementTree.iterparse`,
+3 cold child processes, no archive extraction): total wall time 0.951 / 0.921 / 0.940 s, median 0.94 s; peak RSS
+32.5 / 31.6 / 32.0 MiB. Per-file times of the median run: SHA-256 of the 7.5 MB file 0.004 s, `project.xml` 0.001 s,
+`0.xml` 0.014 s, `knx_master.xml` 0.026 s, three `Hardware.xml` under 0.002 s together, the 12 referenced application
+programs 0.000 to 0.097 s each plus the 50 MB program `M-0083_A-008A-22-33A1.xml` 0.574 s (the benchmark keeps only
+referenced definitions and clears translation and dynamic subtrees). The workload is 28 components, 12 referenced
+programs read, 695 group addresses, 692 communication object references, 3132 parameter references.
+Decision: impl-b (stdlib ElementTree) stands; the measured parse is about 30 times inside the 30 s target, so lxml
+is not needed and was not installed or measured. Re-check of the rule on the finished import: T12/T14.
+Parser check (T6, same machine, own parser building the full source facts of the sample plus derivation, in one
+process): 1.02 s parse, derivation under 0.01 s, peak RSS 65 MiB (including interpreter, pydantic and package
+imports).
+T12 end-to-end measurement (`scripts/measure_sample_import.py`, `create_session` on the sample through the SDK in a
+cold process: fingerprint, archive guard, parser, derivation, summary, `project-graph.json` and `session-state.yaml`
+written, log book; 3 runs through the MCP python_execution tool): 1.185 / 1.182 / 1.180 s, median 1.18 s (target
+30 s, test bound 120 s); peak RSS 83.4 / 86.0 / 83.1 MiB (measured once, documented, not asserted; includes the
+interpreter, pydantic and the package imports); `project-graph.json` 3,202,162 bytes (3.2 MB), indented with
+1 space; the 20 MB switch to compact JSON is not needed (`JSON_INDENT` stays 1). The pytest run measured 1.23 s for
+`import_project` alone and 1.14 s for `create_session`. The impl-a/impl-b rule is re-checked on the finished import:
+1.18 s is far below 30 s, impl-b (stdlib ElementTree) stands, no lxml dependency. Hash cost of the refresh check
+(SHA-256 of the 7.5 MB file): 0.004 s (T1 per-file time).
+
+### Archive and XML limits (hostile archive defence)
+
+Applied by `application/knxproj_archive.py` before any entry is read, and while reading. Never extract files
+to disk (all reads via `zipfile.ZipFile.open` into memory or an incremental parser).
+
+| Limit | Value | Reason code in `details.reason` |
+| --- | --- | --- |
+| Entries in archive | at most 5000 | `ARCHIVE_TOO_MANY_ENTRIES` |
+| Uncompressed size of ONE entry | at most 256 MiB (268435456 bytes) | `ARCHIVE_ENTRY_TOO_LARGE` |
+| Sum of uncompressed sizes | at most 1 GiB (1073741824 bytes) | `ARCHIVE_TOTAL_TOO_LARGE` |
+| Compression ratio of ONE entry = uncompressed size / compressed size | at most 200 (an entry with uncompressed size greater than 0 and compressed size 0 breaches it) | `ARCHIVE_COMPRESSION_RATIO` |
+| Duplicate entry names | rejected | `ARCHIVE_DUPLICATE_ENTRY` |
+| Encrypted entries (general-purpose flag bit 0) | rejected, nothing is read | `ENCRYPTED` |
+
+- "Exceeds" means strictly greater than the limit. Header checks (from the central directory) run for all
+  entries first; `zipfile` never yields more bytes than the declared uncompressed size, so the declared size is
+  a hard read cap. Limits are an `ArchiveLimits` value with these defaults; tests lower them instead of
+  building gigabyte archives, plus one test asserts the default constants.
+- Entry names are never used as file system paths (no extraction), so path traversal names are harmless; they
+  are looked up by exact string only.
+- XML rules for every parsed document (project.xml, 0.xml, knx_master.xml, Catalog/Hardware XML, application
+  programs): no DTD, no entity declaration, no external entity, no network access, no `huge_tree`. With stdlib
+  ElementTree the importer feeds the parser through a guard that scans the byte stream (chunk-overlap safe) for
+  `<!DOCTYPE` and `<!ENTITY` and rejects the document with `XML_DTD_FORBIDDEN` or `XML_ENTITY_FORBIDDEN`;
+  documents that are not UTF-8 (a UTF-16 byte-order mark or an encoding declaration other than UTF-8) are rejected
+  with `XML_ENCODING_UNSUPPORTED` because the ASCII scan would not see them (ETS writes UTF-8 with BOM). The
+  expat entity-amplification protection of Python 3.12 is defence in depth, not the control. If impl-a (lxml)
+  applies: `XMLParser(resolve_entities=False, no_network=True, huge_tree=False, load_dtd=False)` plus the same
+  rejection. Consequence of a rejection (user decision 2026-10-24): in a REQUIRED part (`project.xml`, `0.xml`) it is
+  `PROJECT_PARSE_ERROR` with `details.reason` `XML_DTD_FORBIDDEN`, `XML_ENTITY_FORBIDDEN` or `XML_ENCODING_UNSUPPORTED`;
+  in an OPTIONAL part (catalog, `Hardware.xml`, application program XMLs, `knx_master.xml`; UserFiles, AddinData
+  and BinaryData are never opened) the part is skipped, the import continues, and the warning
+  `OPTIONAL_PART_UNREADABLE` is added with the same reason in the message (`reason: XML_DTD_FORBIDDEN` etc.). The
+  guard decides before parsing, so the part is never parsed and none of its content is used; facts depending on it
+  stay unresolved and are reported by the other warning codes (for example the affected components' objects get
+  `COMOBJECT_DEFINITION_UNRESOLVED`).
+- Required parts (failure = `PROJECT_PARSE_ERROR`): the project folder's `project.xml` and `0.xml`. The project
+  folder is the one top-level folder matching `P-<hex digits>` that contains `project.xml`
+  (`PROJECT_FOLDER_NOT_FOUND` when none or more than one). Missing part: `REQUIRED_PART_MISSING`; not
+  well-formed: `REQUIRED_PART_MALFORMED`.
+- Normative part lists. REQUIRED parts, exactly two: `<project folder>/project.xml` and `<project folder>/0.xml`.
+  OPTIONAL parts, everything else that the import may read: `<M>/Hardware.xml`, `<M>/Catalog.xml`, application
+  program XMLs `<M>/<application program id>.xml`, `knx_master.xml`; the entries under `UserFiles`, `AddinData`,
+  `BinaryData`, `Baggages`, the signature/certificate/`.validation` entries and all other entries are optional
+  and never opened. Failure classes: a required part failure (missing, malformed, DTD/entity/encoding) is
+  `PROJECT_PARSE_ERROR`. For an optional part, `OPTIONAL_PART_MISSING` = absent from the archive;
+  `OPTIONAL_PART_UNREADABLE` = present but rejected or malformed; its message AND the warning's structured
+  reason text carry the underlying reason: `XML_DTD_FORBIDDEN`, `XML_ENTITY_FORBIDDEN`,
+  `XML_ENCODING_UNSUPPORTED`, `XML_MALFORMED` or `ENTRY_READ_ERROR` (the message form is
+  `Optional part skipped (reason: <REASON>)`). ARCHIVE-LEVEL guard failures (too many entries, entry or total
+  size, compression ratio, duplicate entry names, encrypted entry, not a zip archive) stay `PROJECT_PARSE_ERROR`
+  even when they concern only an optional part (they are checked on the whole archive before any part is read).
+- Optional parts (failure = warning, the import continues): manufacturer catalog folders `M-<hex>/`
+  (`Catalog.xml`, `Hardware.xml`, application program XMLs), `knx_master.xml`, `UserFiles`, `AddinData`,
+  `BinaryData`, `*.signature`, `*.certificate`, `.validation`. Only `Hardware.xml`, the application program XMLs
+  of components that exist, and `knx_master.xml` are read; the other optional parts are never opened. Facts that
+  depend on an unreadable optional part (communication object and parameter definitions, datapoint type
+  verification) are reported as limitation notes via the warnings below. The ETS signature and certificate are
+  NOT verified (documented limitation).
+- `PROJECT_PARSE_ERROR` `details`: `reason` (one of: `NOT_A_ZIP`, `ENCRYPTED`, `ARCHIVE_TOO_MANY_ENTRIES`,
+  `ARCHIVE_ENTRY_TOO_LARGE`, `ARCHIVE_TOTAL_TOO_LARGE`, `ARCHIVE_COMPRESSION_RATIO`, `ARCHIVE_DUPLICATE_ENTRY`,
+  `PROJECT_FOLDER_NOT_FOUND`, `REQUIRED_PART_MISSING`, `REQUIRED_PART_MALFORMED`, `NOT_ETS_PROJECT`,
+  `UNSUPPORTED_NAMESPACE`, `UNSUPPORTED_TOOL_VERSION`, `XML_DTD_FORBIDDEN`, `XML_ENTITY_FORBIDDEN`,
+  `XML_ENCODING_UNSUPPORTED`), `path` (the `.knxproj`), and where relevant `entry` (zip entry), `limit`, `actual`,
+  `namespace`, `tool_version`. The message names the reason in words. `NOT_ETS_PROJECT`: root element is not `KNX`
+  or the project element/`Id` is missing. Support check: root namespace must equal
+  `http://knx.org/xml/project/22` (else `UNSUPPORTED_NAMESPACE`) and the root `ToolVersion` major (digits before
+  the first `.`) must be 6 (else `UNSUPPORTED_TOOL_VERSION`; a missing or unparsable `ToolVersion` is also
+  `UNSUPPORTED_TOOL_VERSION`). A failure of any kind leaves the previous state and graph untouched.
+- Only `0.xml` (installation id `<project id>-0`) is imported. Other `<n>.xml` installation files in the
+  project folder are ignored with warning `ADDITIONAL_INSTALLATION_IGNORED`.
+
+### Project graph model
+
+Module placement: pure model in `domain/project_graph.py` (Pydantic v2 models, no I/O); parser in
+`application/knxproj_parser.py`; derivation in `domain/derivation.py`. The graph has two separate parts and one
+list of warnings:
+
+1. `source_facts`: nodes and relations imported without interpretation beyond parsing and normalization.
+2. `derived_facts`: facts computed from source facts (component typing, reverse indexes). Recomputable; nothing
+   in `source_facts` depends on them, and no derived value is ever written into a source node.
+3. `warnings`: import warnings (contract below).
+
+Common node fields (source facts): `id` (stable ID), `kind`, `id_origin` (`ETS_ID`, `ETS_COMPOSITE`,
+`STRUCTURAL_FALLBACK`), and provenance: `source_part` (zip entry name), `source_locator` (the XML element
+tag with its ETS `Id`/`RefId` or, without one, its structural path, for example
+`DeviceInstance[@Id=P-051B-0_DI-6]`), and `fact_origin` (`PROJECT` for the project folder, `CATALOG` for
+manufacturer catalog and application program facts, `MASTER` for `knx_master.xml`).
+
+Node kinds and fields (names are the persisted JSON field names; `null` when the attribute is absent):
+
+| Kind | Source of the node | Fields beyond the common fields |
+| --- | --- | --- |
+| `installation` | `0.xml` Installation, project.xml ProjectInformation | `project_id`, `project_name`, `group_address_style` (`ThreeLevel`, `TwoLevel` or `Free`), `default_line_id`, `last_modified`, `completion_status`, `ets_tool_version`, `created_by`, `schema_namespace` |
+| `area` | Topology/Area | `installation_id`, `address` (int), `name` |
+| `line` | Area/Line | `area_id`, `address` (int), `name`, `description`, `medium_type_refs` (from its Segments, for example `MT-5`) |
+| `space` | Locations//Space | `parent_id` (null for the top space), `space_type` (`Building`, `Floor`, `Room`, `Corridor`, `DistributionBoard`, other values kept verbatim), `name`, `usage_ref` (for example `SU-7`) |
+| `component` | Line/Segment/DeviceInstance | `line_id`, `segment_id`, `medium_type_ref`, `address` (int, device number), `individual_address` ("area.line.device"), `name`, `description`, `comment`, `product_ref_id`, `hardware2program_ref_id`, `application_program_id` (resolved through the catalog, else `null`), `manufacturer_id` (from the product reference, for example `M-0083`), `product_text`, `order_number` (catalog, optional), `has_ip_config` (boolean), `serial_number`, `last_modified`, `last_download`, `load_state` (the five `...Loaded` booleans as an object) |
+| `communication_object` | DeviceInstance/ComObjectInstanceRefs/ComObjectInstanceRef | `component_id`, `ref_id` (for example `O-23_R-113`), `object_number`, `function_text`, `text`, `object_size`, `read_flag`, `write_flag`, `communication_flag`, `transmit_flag`, `update_flag`, `read_on_init_flag` (each `Enabled`, `Disabled` or `null`), `datapoint_types` (list of ETS datapoint ids such as `DPST-1-1`, as written; empty if none), `channel_id`, `description` (instance description), `instance_text` (instance `Text`), `definition_resolved` (boolean) |
+| `group_address` | GroupAddresses//GroupAddress | `address_raw` (int 0-65535), `address` (text formatted per `group_address_style`, for example `5/0/12`), `name`, `description`, `datapoint_type` (as written, or `null`), `range_id` (nearest GroupRange or `null`) |
+| `group_range` | GroupRanges//GroupRange | `parent_id`, `range_start`, `range_end`, `name`, `description` |
+| `parameter` | DeviceInstance/ParameterInstanceRefs/ParameterInstanceRef | `component_id`, `ref_id`, `parameter_id` (resolved definition id or `null`), `name`, `text`, `parameter_type_id`, `value` (raw string exactly as in the project), `definition_resolved` (boolean) |
+| `scene` | reserved, see below | `name`, `scene_number`, `members` |
+| `application_program` | catalog Hardware.xml and application program XML (CATALOG) | `manufacturer_id`, `application_number`, `application_version`, `mask_version`, `name` (if present), `source_loaded` (boolean: the XML was found and read) |
+
+Relations (source facts, listed under `source_facts.relations`):
+
+| Relation | Fields | Source |
+| --- | --- | --- |
+| `membership` | `communication_object_id`, `group_address_id`, `order` (0-based position in `Links`; the semantics of position 0 (sending address) are NOT asserted here; todo 15 must verify them before `trace_group_flow` relies on them) | `Links` attribute (space-separated `GA-<n>`, resolved to `<project id>-0_GA-<n>`) |
+| `placed_in` | `space_id`, `component_id` | `Space/DeviceInstanceRef` |
+
+Containment is carried by the parent fields above (`area.installation_id`, `line.area_id`, `component.line_id`,
+`space.parent_id`, `communication_object.component_id`, `parameter.component_id`, `group_address.range_id`,
+`group_range.parent_id`). Segments are not a node kind; the segment id and medium type are fields of line and
+component. Channels (`Node` elements), `ModuleInstance`, `Argument`, `Security`, `BinaryData`, `IPConfig`
+details, `AdditionalAddresses`, `ProjectTrace` (ETS change history) and `UserFiles` are intentionally not
+modelled (no warning); `channel_id` is kept on communication objects.
+
+Scenes: the sample contains no scene elements, so the real ETS 6 scene structure is not verified. The node
+kind `scene` is part of the model; the parser creates scene nodes only from elements named `Scene` it can map
+(`Name`, `Number`, and member references) and otherwise emits `UNSUPPORTED_ELEMENT` once per distinct element
+name containing "Scene" (case-insensitive). The sample count for `scene` is 0. A synthetic fixture covers the
+mapped form; real-world scene coverage is a limitation noted for todo 15.
+
+Referenced application program (ONE normative definition). An application program is "referenced" if and only
+if at least one component resolves to it by the following path, checked on the real sample
+(`DeviceInstance/@Hardware2ProgramRefId` = `M-0083_H-88-1_HP-0056-11-A826`):
+
+1. Normative path (P1): `DeviceInstance/@Hardware2ProgramRefId` -> the manufacturer folder `<M>` is the part of
+   that value before the first `_` (`M-0083`) -> entry `<M>/Hardware.xml` -> the `Hardware2Program` element whose
+   `Id` equals that value -> its `ApplicationProgramRef/@RefId` (`M-0083_A-0056-11-A826`) = the application
+   program id -> the application program XML is the entry `<M>/<application program id>.xml`.
+2. `DeviceInstance/@ProductRefId` is NOT a path to the application program (one product/hardware can offer
+   several programs). It only supplies `product_text` and `order_number` through `Hardware.xml`
+   `Product`; an unresolvable product gives `PRODUCT_REFERENCE_UNRESOLVED`.
+3. Fallback (P2), used only when `<M>/Hardware.xml` is absent or unreadable, or has no matching
+   `Hardware2Program`: derive the id textually, `<M>_H-...-<x>_HP-<rest>` -> `<M>_A-<rest>` (for the sample value
+   `M-0083_A-0056-11-A826`); the derived id counts as resolved only if the entry `<M>/<id>.xml` exists. P2 is
+   always accompanied by the warning that explains why P1 was not usable (`OPTIONAL_PART_MISSING`,
+   `OPTIONAL_PART_UNREADABLE` or `PRODUCT_REFERENCE_UNRESOLVED`).
+4. Disagreement: when P1 and P2 are both computable and give different ids, P1 wins and the warning
+   `APPLICATION_PROGRAM_REFERENCE_MISMATCH` is added. When the `ParameterInstanceRef/@RefId` values of a
+   component name an application program id (the part before `_P-` or `_UP-`) different from the resolved
+   program, the resolved program (P1, else P2) still wins, those parameters stay unresolved
+   (`PARAMETER_DEFINITION_UNRESOLVED`) and one `APPLICATION_PROGRAM_REFERENCE_MISMATCH` is added per component.
+5. A component for which neither path yields an existing entry gets `application_program_id` as resolved by
+   P1/P2 if known (else `null`) and `APPLICATION_PROGRAM_MISSING`.
+6. Only referenced programs are opened. The sample: 28 components reference 12 distinct application programs;
+   the archive holds 13 application program XMLs; `M-0083/M-0083_A-003B-24-3717.xml` is not referenced and is
+   NEVER opened or read.
+
+Resolution of definitions (CATALOG facts): `communication_object.ref_id` `O-n_R-m` resolves
+to the `ComObjectRef` with id `<application program id>_O-n_R-m` and its `ComObject`
+(`<application program id>_O-n`); attributes of the reference override those of the object. `parameter.ref_id`
+is the `ParameterRef` id; its `RefId` is the `Parameter` (also inside `Union`). Only application programs
+referenced by components are opened, each streamed with incremental parsing; only definitions whose ids are
+referenced by the component instances are kept (the parameter definition id is the `ref_id` up to the last
+`_R-`), and large subtrees (translations, dynamic sections) are cleared as soon as they end, so memory stays
+bounded by the project, not by the 50 MB file. Unreferenced programs in the archive are never read.
+
+### Stable ID rules
+
+1. Element has an ETS `Id` attribute (`Area`, `Line`, `Segment`, `DeviceInstance`, `GroupAddress`, `GroupRange`,
+   `Space`): `id` = that value, `id_origin` `ETS_ID`. Example `P-051B-0_DI-6`.
+2. The installation has no `Id`: `id` = `<project folder id>-<installation file stem>`, for example `P-051B-0`
+   (`ETS_COMPOSITE`).
+3. Elements identified only by a reference inside a component get a composite ID (`ETS_COMPOSITE`):
+   communication object `<component id>/co/<RefId>`, parameter `<component id>/pa/<RefId>`. Membership has no
+   node ID; a relation is identified by the pair of IDs plus `order`. Application program `<ApplicationProgramRef RefId>`
+   (for example `M-0083_A-0056-11-A826`).
+4. An element that should have an `Id` but lacks it (or an element kind that has none, such as a scene) gets the
+   structural fallback (`STRUCTURAL_FALLBACK`): `s:` + parent id + `/` + kind + `[` + key + `]`, key = the
+   `Address` value if present, else the `Name`, else the 0-based position among same-kind siblings. A warning
+   `STRUCTURAL_ID_FALLBACK` is emitted for each such element. Fallback IDs change when the structure changes;
+   ETS and composite IDs do not.
+5. Collision: when two nodes would get the same `id`, the later one gets the suffix `~2`, `~3`, ... and the
+   warning `DUPLICATE_ID` is emitted (location = first colliding element).
+6. Determinism: the same file always yields the same IDs, nodes sorted by (`kind`, `id`), relations by their
+   key; the persisted graph is byte-identical across re-imports of the same file (it contains no timestamps).
+
+### Derivation: component typing (derived facts)
+
+Module `domain/derivation.py` (pure). Input: source facts. Output, stored under `derived_facts`:
+
+- `component_typing`: object keyed by component id; value `{component_type, rule_id, basis}`.
+- `membership_index`: `group_address_to_communication_objects` (group address id -> sorted communication object
+  ids) and `component_to_group_addresses` (component id -> sorted group address ids). Reverse indexes only.
+- `derived_counts`: `component_type_counts`.
+
+Component typing is never a source fact and is recomputed on every import. Values of `component_type`:
+`IP_COUPLER_OR_INTERFACE`, `COUPLER`, `SENSOR`, `ACTUATOR`, `CONTROLLER`, `UNTYPED`. Rules are evaluated strictly in
+the order CT0, CT1, CT2, CT3, CT4; the first rule whose condition holds decides and later rules are not
+evaluated (so an override beats everything; an IP component with device number 0 is `IP_COUPLER_OR_INTERFACE`, not
+`COUPLER`); `rule_id` names the deciding rule and `basis` lists the inputs used. The override table of CT0 lives
+only as a parameter of the derivation function (`overrides`), is EMPTY by default, is never read from a file,
+the environment or the project, and is never persisted; only tests inject entries, so a real import always starts
+at CT1:
+
+| Rule id | Condition | Type |
+| --- | --- | --- |
+| `CT0_OVERRIDE` | an entry of the curated override table matches the component's `product_ref_id`, `hardware2program_ref_id` or `application_program_id` (exact); the table is a function parameter, EMPTY by default, so data-driven tests inject entries; this is the extension point for product or application based typing | entry's type |
+| `CT1_IP` | `has_ip_config` is true, or the component's segment medium type is `MT-5` (IP) | `IP_COUPLER_OR_INTERFACE` |
+| `CT2_COUPLER` | `address` (device number) is 0 | `COUPLER` |
+| `CT3_NO_OBJECTS` | no communication object with `definition_resolved` true | `UNTYPED` |
+| `CT4_DIRECTION` | let R = objects with `write_flag` Enabled and T = objects with `transmit_flag` Enabled (an object may count in both). R>0 and T=0: `ACTUATOR`; T>0 and R=0: `SENSOR`; R=0 and T=0: `UNTYPED`; both >0: if R >= 2*T then `ACTUATOR`, else if T >= 2*R then `SENSOR`, otherwise `CONTROLLER` (mixed direction). Direction of the comparison: write flag (receive, R) is compared against transmit flag (T); the exact boundary favours the stated side (R = 2T is `ACTUATOR`, T = 2R is `SENSOR`); a tie R = T > 0 is `CONTROLLER`; R = 1, T = 1 is `CONTROLLER`; R = 3, T = 2 is `CONTROLLER`. Only objects with `definition_resolved` true and a flag value `Enabled` count; objects with unresolved flags (`null`) count in neither R nor T. The two conditions R >= 2T and T >= 2R cannot both hold when R, T > 0 | per rule |
+
+Rule coverage by fixture (`tests/fixtures/typing_rule_cases.yaml`, T4/T7): CT0 matches by each of the three
+keys and beats CT1; CT1 by `has_ip_config` and by medium `MT-5`; CT1 beats CT2; CT2 (device number 0) beats CT3;
+CT3 with zero objects and with objects whose definitions are unresolved; CT4 for R>0/T=0, T>0/R=0, R=T=0 with
+resolved objects (`UNTYPED`, rule id `CT4_DIRECTION`), R = 2T, R = 2T - 1 (`CONTROLLER`), T = 2R, T = 2R - 1
+(`CONTROLLER`), the tie R = T (`CONTROLLER`), and an object with both flags Enabled counting in both R and T.
+
+`basis` always holds: `product_ref_id`, `application_program_id`, `receive_object_count` (R), `transmit_object_count` (T),
+`object_count`, `datapoint_main_types` (sorted unique main numbers parsed from the objects' `datapoint_types`, for
+example `["1", "5", "9"]`; subtype tokens are parsed from the ids `DPT-<n>` / `DPST-<n>-<m>`; the objects' datapoint types
+are checked against `knx_master.xml` when readable). Typing is coarse by design: purpose annotation is todo 14.
+The rule set may only be extended by a spec change (new rule ids), never by changing the meaning of an existing id.
+
+### Warnings contract
+
+Model `ImportWarning` (contracts): `code` (string), `message` (string, one sentence, no personal data beyond element ids and names present in the project),
+`location` (string): the zip entry (`M-0083/Hardware.xml`), or `<zip entry>#<ETS id or locator>`
+(`P-051B/0.xml#P-051B-0_DI-6`). The full ordered list is persisted in `project-graph.json`; `session-state.yaml`
+keeps the first 200 plus the counts. Codes:
+
+| Code | Meaning |
+| --- | --- |
+| `OPTIONAL_PART_MISSING` | an optional part that the import needs is ABSENT from the archive (`knx_master.xml`, a manufacturer `Hardware.xml`); nothing was read |
+| `OPTIONAL_PART_UNREADABLE` | an optional part is skipped: not well-formed, unreadable, or rejected by the XML guard (DTD, entity declaration or non-UTF-8 encoding). The message names the reason (`reason: XML_DTD_FORBIDDEN`, `XML_ENTITY_FORBIDDEN`, `XML_ENCODING_UNSUPPORTED`, or a malformed/read-error cause); a rejected part is never parsed or partially used |
+| `APPLICATION_PROGRAM_MISSING` | a component's application program XML is not in the archive or not found through the catalog; its objects and parameters stay unresolved |
+| `PRODUCT_REFERENCE_UNRESOLVED` | the product or hardware-to-program reference of a component is not found in the catalog |
+| `APPLICATION_PROGRAM_REFERENCE_MISMATCH` | resolution paths P1 and P2 disagree, or a component's parameter references name another application program than the resolved one (P1 wins; see "Referenced application program") |
+| `COMOBJECT_DEFINITION_UNRESOLVED` | a communication object reference has no definition in the application program (`definition_resolved` false) |
+| `PARAMETER_DEFINITION_UNRESOLVED` | same for a parameter reference |
+| `GROUP_ADDRESS_LINK_UNRESOLVED` | a `Links` entry names a group address that does not exist; no membership is created |
+| `DEVICE_REFERENCE_UNRESOLVED` | a `Space/DeviceInstanceRef` names a component that does not exist; no `placed_in` relation |
+| `DATAPOINT_TYPE_UNKNOWN` | a datapoint type id is not found in `knx_master.xml` (only when the master was read) |
+| `INVALID_ATTRIBUTE_VALUE` | a required attribute (for example `Address`) is missing or not numeric; the element is skipped |
+| `DUPLICATE_ID` | stable ID collision (rule 5) |
+| `STRUCTURAL_ID_FALLBACK` | a node got a structural fallback ID (rule 4) |
+| `UNSUPPORTED_ELEMENT` | scene-like content that cannot be mapped (see Scenes) |
+| `ADDITIONAL_INSTALLATION_IGNORED` | a second installation file `<n>.xml` exists |
+
+### Persistence: `project-graph.json` and its relation to `session-state.yaml`
+
+- File `project-graph.json` in the work-directory, UTF-8 JSON, keys sorted, written atomically (temporary file in
+  the same folder, then `os.replace`). Top-level keys: `graph_schema_version` (1), `fingerprint`, `source_facts`
+  (`nodes`, `relations`), `derived_facts`, `warnings`. It contains no wall-clock times, so an unchanged project
+  re-imports to byte-identical content. Size of the sample graph is measured and recorded at T12; if it exceeds
+  20 MB switch to compact JSON (no indentation).
+- `session-state.yaml` `project_import` after story 04 (replaces the story 03 shape): `path`, `mtime`
+  (integer ns), `size`, `imported_at`, `fingerprint` (64 lowercase hex digits), `graph_file`
+  (`project-graph.json`, relative), `graph_schema_version`, `project_import_summary`, `warnings` (first 200
+  import warnings). `project_refresh` is unchanged.
+- Write order on import and re-import: parse completely first (a failure writes nothing), then write
+  `project-graph.json`, then `session-state.yaml`. A crash between the two leaves a stale fingerprint in the
+  state, so the next refresh check re-imports (self-healing). `create_session` builds both inside the temporary
+  sibling folder (atomic create, story 03). A missing or corrupt `project-graph.json` of an existing session is
+  repaired by the next refresh check or explicit re-import (the check treats a missing graph file as CHANGED).
+- Single-writer assumption (story 03) applies. The graph file is read only by `reimport_system_definition` (to
+  compute `changes` against the old graph), by the automatic re-import for the same purpose (counts in the log),
+  and by the later query capabilities; `describe_session` and an unchanged refresh check do not read it.
+
+### Fingerprint and refresh check
+
+Terms used in this section and in the task plan (use exactly these; the terminology dictionary is unchanged):
+
+- **Fingerprint**: the SHA-256 of the `.knxproj` file bytes, lowercase hex, stored as `project_import.fingerprint`.
+- **Project refresh check**: the per-call step that compares the bound `.knxproj` file with the stored import
+  metadata (existence, mtime, size, fingerprint) and re-imports it automatically when anything differs.
+- **CHANGED**: the value of `project_refresh.last_status` and of `project_refresh_status` meaning that mtime, size,
+  fingerprint or the graph file differed from the stored state, so the project was re-imported with new metadata.
+- **UNCHANGED**: the value meaning that all of these were equal; for an explicit `reimport_system_definition` the
+  file was nevertheless re-read and the graph rewritten, for the automatic check nothing is written.
+
+- Fingerprint = SHA-256 of the `.knxproj` file bytes, lowercase hex, computed over the whole file in 1 MiB chunks.
+- Refresh check order, run before every session-scoped call: (1) existence and readability
+  (`PROJECT_FILE_UNREADABLE`, state unchanged); (2) `mtime` differs; (3) `size` differs; (4) fingerprint differs.
+  Steps 2 and 3 are the cheap short-circuit: a difference means CHANGED without hashing first (the hash is then
+  computed as part of the re-import). Only when mtime and size equal the stored values is the file hashed and the
+  result compared (step 4). So the hash is computed on every check that does not already find a change; for the
+  7.5 MB sample that is about 10 to 30 ms (measured at T12 and recorded in README.md).
+- Any difference (including `fingerprint` stored as `null`, which is the case for sessions of story 03, or a
+  missing graph file) means CHANGED: automatic re-import, atomic state and graph update, `reimport_count`
+  incremented, exactly as in story 03. Equal on all four: no write (idempotent; the state file stays byte-identical).
+- `reimport_system_definition` always re-parses: status CHANGED when any of mtime, size or fingerprint differs from
+  the stored values (or the graph file is missing), else UNCHANGED; `imported_at` is always rewritten; the graph is
+  rewritten and compared with the old one in both cases.
+- The file is stat-ed before hashing and again after the import; if mtime or size changed in between, the import
+  is aborted with `PROJECT_FILE_UNREADABLE` (`details.reason` `CHANGED_DURING_IMPORT`), nothing is written.
+
+### `project_import_summary`
+
+Persisted in `session-state.yaml`, returned unchanged by `create_session`, `reimport_system_definition` and (inside
+`project_import`) `describe_session`. Fields (the story 03 field `limitation_note` is removed; limitation notes
+are in the envelope):
+
+- `file_name`, `archive_entry_count`
+- `ets_tool_version` (for example `6.1.5686.0`), `schema_namespace`, `created_by` (`ETS6`), `project_id`, `project_name`, `group_address_style`
+- `node_counts`: object with one integer per node kind (all kinds listed, 0 when absent): `installation`, `area`, `line`, `space`, `component`, `communication_object`, `group_address`, `group_range`, `parameter`, `scene`, `application_program`
+- `relation_counts`: `membership`, `placed_in`
+- `component_type_counts`: derived (object, type -> integer; types with 0 omitted)
+- `application_programs`: `referenced` (distinct programs components use), `read` (found and read), `unreadable`
+- `warning_total`, `warning_counts` (object, code -> integer)
+- `graph_file`, `graph_schema_version`
+
+Golden counts for the sample (initial values for `tests/fixtures/sample_project_counts.yaml`, measured at planning
+by element counts in the XML; the user may edit the fixture): `installation` 1, `area` 2, `line` 3, `space` 21,
+`component` 28, `communication_object` 692, `group_address` 695, `group_range` 60, `parameter` 3132, `scene` 0,
+`application_program` 12 (13 application program XMLs are in the archive; one is unreferenced and not read),
+`membership` 677, `ets_tool_version` 6.1.5686.0, namespace `http://knx.org/xml/project/22`, `archive_entry_count`
+82, project id `P-051B`. The importer must reproduce these numbers; a mismatch is investigated, not silently
+re-baselined.
+
+Envelope `limitation_notes` of `create_session`, `reimport_system_definition` and `describe_session`: one entry per
+import warning, formatted `[<code>] <message> (<location>)`, at most 50 entries; when more exist a last entry states
+`<n> more import warnings not listed; see project_import_summary.warning_counts and project-graph.json`. When the
+import produced no warnings the list is empty (the story 03 placeholder note is gone). Standing limitation:
+the ETS signature is not verified (documented in README.md, not repeated in every response).
+
+### Reimport: `changes` and `invalidated_references`
+
+`changes` (list of objects, sorted by `entity`, then `id`; empty when nothing changed or at first import):
+`{entity: "component" | "group_address", change: "added" | "removed" | "changed", id, label, details}`.
+- `label`: component `name` with `individual_address`, or group address `address` with `name`.
+- `details` for `added`/`removed`: `{}`. For `changed`: `{changed_fields: [..], old: {..}, new: {..}}` with the
+  source fields that differ. Component fields compared: the component fields in the node table except
+  provenance, plus `parameters` (count of parameter nodes whose `value` or presence differs, listed as
+  `parameter_ref_ids` changed), and `group_addresses` (the sorted ids of the component's linked group addresses,
+  from the memberships). Group address fields compared: `address_raw`, `name`, `description`, `datapoint_type`.
+- Comparison is by stable ID; a node whose ID changed (structural fallback) appears as removed plus added.
+- No other entity is reported in `changes`; communication objects and parameters appear only as changes of their component.
+
+`invalidated_references` (list of objects; empty when nothing is invalidated): scan `session-state.yaml`
+`scenario_state` and `mutations` entries (their schemas are defined by todos 06 and 08). An entry that is an
+object with `component_id`, `component_ids` (list) or `group_address_id` naming an ID that existed in the old graph and is
+absent from the new graph yields
+`{reference_kind: "scenario_state" | "mutation_delta", owner, component_id | group_address_id, reason: "COMPONENT_REMOVED" | "GROUP_ADDRESS_REMOVED"}`.
+`owner` is the mutation `name` for mutations, else the zero-based list index as text. Entries without these keys are
+ignored. State is retained, never deleted (catalogue 2 proposal); each invalidated reference also appears as a
+limitation note. Tests inject synthetic entries into `session-state.yaml`.
+
+### What `describe_session` returns
+
+Everything of story 03 plus `project_import`: `{imported_at, fingerprint, graph_file (absolute path), project_import_summary}`.
+It reads only `session-state.yaml` (the summary and the first 200 warnings are persisted there). The envelope
+`limitation_notes` are the import warnings as above. Its automatic refresh check may re-import.
+
+### Log points (additions to the story 03 table)
+
+| Log point | Capability | Level | Summary / details |
+| --- | --- | --- | --- |
+| Import finished (create) | `create_session` | INFO (the existing "Session created" entry) | details gain: fingerprint, `node_counts`, `warning_total`, import duration in seconds |
+| Re-import finished (explicit or automatic) | `reimport_system_definition` or the calling capability | INFO (existing entries) | details gain: fingerprint old/new, `warning_total`, counts of `changes` by entity and change, count of `invalidated_references`, duration |
+| Import started | the calling capability | DEBUG | project path, size |
+| Each import warning | the calling capability | DEBUG (one entry each, at most 200, then one DEBUG entry stating how many were omitted) | code, message, location |
+| Import failed (`PROJECT_PARSE_ERROR`, `PROJECT_FILE_UNREADABLE`) | the calling capability | ERROR | as story 03; always written; reason in details |
+
+Import warnings are not issues in the sense of the story 03 ERROR rule (see decisions): they do not produce ERROR
+entries. Python logging: one `logging.WARNING` record on logger `knx_agent.application` per import that has warnings
+(counts only, no per-warning records at WARNING; per-warning records at DEBUG). No custom logging code.
+
+### Dependencies
+
+Runtime: no new dependency while impl-b stands (stdlib `zipfile`, `hashlib`, `xml.etree.ElementTree`, `json`).
+Dev group: `xknxproject` (GPL-2.0, dev-time cross-check only, never imported by `src/`; if it cannot be installed
+the cross-check test skips and the golden counts are the fallback). Licenses are recorded in
+`development/todos/12-dependency-license-governance.md`; if lxml is adopted by the benchmark rule it is added as
+a runtime dependency (BSD-3-Clause) with a README.md note.
+
+### Module placement (layering, story 04)
+
+`domain`: `project_graph.py` (models, ID helpers), `derivation.py` (component typing, indexes), `graph_diff.py`
+(changes, invalidated references; pure). `application`: `knxproj_archive.py` (limits, hostile-archive guard,
+safe XML reading), `knxproj_parser.py` (ETS 6 elements to graph), `project_importer.py` (fingerprint, archive,
+parser, derivation -> `ImportResult`), `graph_store.py` (JSON read/write, atomic), and changes to
+`knxproj_guard.py` (keeps `stat_project`), `project_refresh_guard.py`, `session_lifecycle.py`, `session_service.py`.
+`contracts`: extended `ProjectImportSummary`, new `ImportWarning`, `ProjectChange`, `InvalidatedReference`,
+`ProjectImportInfo`; `DescribeSessionResponse.project_import`. Adapters (SDK, CLI, MCP) need no new command; they
+return the extended models unchanged. Import-direction test stays green.
+
+### Implementation notes (T1 to T8, interpretations recorded by the implementation)
+
+- Parameter reference prefix (P4): the application program id named by a `ParameterInstanceRef/@RefId` is the part
+  before `_P-`, `_UP-` or `_MD-`. `_MD-` is needed because module-instance references of the sample
+  (`M-0083_A-013C-32-51EA_MD-2_M-1_MI-1_P-1_R-1`) would otherwise count as another program. Module-instance
+  references (ids with `_MD-..._MI-...`) are not resolved against module definitions: their objects and parameters
+  stay `definition_resolved` false with the unresolved warnings (sample: 12 objects and 14 parameters of one component).
+- Unresolved warnings are emitted per object or parameter when the program was read or was rejected/unreadable; for a
+  missing program (`APPLICATION_PROGRAM_MISSING`, once per component) no per-object warnings follow.
+- `DATAPOINT_TYPE_UNKNOWN` is emitted once per distinct unknown id (location: first node using it).
+- `INVALID_ATTRIBUTE_VALUE`: `Address` of Area, Line, DeviceInstance and GroupAddress (group address also 0 to 65535)
+  must be numeric, else the element and its subtree are skipped; `RangeStart`/`RangeEnd` of a GroupRange must be
+  numeric, else only the range node is skipped and its children attach to the enclosing range.
+- Scene detection: the element `Scene` (case-sensitive) maps to a scene node, its descendants are not reported; the
+  plural container `Scenes` is not reported either; any other element name containing "scene" gives one
+  `UNSUPPORTED_ELEMENT` per distinct name. A scene without `Id` gets a structural fallback ID and a
+  `STRUCTURAL_ID_FALLBACK` warning.
+- Typing basis: `object_count` counts all communication objects of the component; R and T count only objects with
+  `definition_resolved` true. CT0 entries are `TypeOverride(match, value, component_type)` (first match in table order).
+- Change details for a changed component: `details.old.parameters` and `details.new.parameters` map the changed
+  parameter `ref_id`s to their old/new raw value (`null` = absent).
+- Required-part check: `0.xml` without an `Installation` element is `REQUIRED_PART_MALFORMED`.
+- Optional parts are scanned in full before parsing (a second decompression pass), so a rejected optional part never
+  reaches a parser and nothing from it is used; archive-level guard failures are checked on the whole central
+  directory first.
+- Story 03 transition (done in T10): `limitation_note`, `LIMITATION_NOTE` and `inspect_project`/`ProjectFileInfo` are
+  removed; `DescribeSessionResponse.project_import` is required. The content fields of `ProjectImportSummary` keep
+  their defaults (they are harmless and keep small hand-built summaries in tests short).
+
+### Implementation notes (T9 to T13, interpretations recorded by the implementation)
+
+- Modules: `application/project_importer.py` (`import_project`, `ImportResult`, `file_fingerprint`, `build_summary`),
+  `application/import_support.py` (persisted `project_import` shape, log points, limitation notes). The importer
+  stats the file, hashes it (1 MiB chunks), opens the archive guard, parses, derives and stats again; it writes
+  nothing. `overrides` (CT0) is a parameter of `import_project` only.
+- Log points: "Import started" (DEBUG) is written before the import for re-imports. For `create_session` the log book
+  exists only after the import, so the DEBUG entries "Import started", the per-warning entries and the INFO entry
+  "Session created" are written into the new log book in that order just before the atomic rename (their timestamps
+  are those of writing). Per-warning DEBUG entries and the single Python WARNING record (logger `knx_agent.application`)
+  are written after the graph and state write; the INFO entry comes last and its id is the envelope
+  `log_book_entry_id`. INFO details of re-imports: `status`, old/new mtime, size and fingerprint, `warning_total`,
+  `changes` (counts keyed `<entity>_<change>`, for example `component_added`), `invalidated_references` (count),
+  `duration_s`. ERROR entries gain `details.reason` when the error has one.
+- Refresh check: a stored fingerprint of `null` or a missing `project-graph.json` is CHANGED before any hashing
+  (nothing to compare); a present but corrupt graph file is not detected by the automatic check (it would need a
+  read of the graph) and is repaired by the next explicit `reimport_system_definition` (the old graph then counts as
+  missing, so `changes` is empty).
+- A failure between the graph write and the state write leaves the new graph with the old state; the stale fingerprint
+  makes the next refresh check re-import (self-healing, as specified).
+- Archive reading: every referenced application program XML is opened twice (once by the XML guard scan, once by the
+  parser); the sample test asserts exactly 12 distinct program entries opened, 2 openings each, and that
+  `M-0083/M-0083_A-003B-24-3717.xml` is never opened.
+- `limitation_notes` of `describe_session` come from the 200 warnings persisted in `session-state.yaml`; the
+  "n more" entry uses `project_import_summary.warning_total - 50`.
+- xknxproject cross-check (T12): individual addresses (28) and group addresses (695, including `raw_address`) are
+  equal. xknxproject reports 677 communication objects against our 692 because it lists only objects that have at
+  least one group address link; per component, the number of our objects with a membership equals its
+  `communication_object_ids` for all 28 components (the three components with the difference are those that own
+  unlinked objects). The test asserts this and that the gap equals the number of unlinked objects.
+- T11: no code change was needed in SDK, CLI or MCP (they return the extended models unchanged); tests were added or
+  updated in `tests/test_adapters.py`, `tests/test_sdk.py` and `tests/test_contracts.py`.
 
 ## Traceability: use case to capability
 

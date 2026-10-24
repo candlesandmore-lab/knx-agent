@@ -2,7 +2,7 @@
 # Edit or add entries here; tests parametrize from this file (see tests/conftest.py).
 #
 # valid:   session is created with session_label under a temporary session root, then described;
-#          expectations are checked against the response.
+#          expectations are checked against the response (the built project is clean, so no limitation notes).
 # invalid: session_label rejected with a KnxAgentError carrying expected_error_code
 #          (no session with that label exists).
 
@@ -12,19 +12,19 @@ valid:
     expected_setup: "default"
     expected_active_setup: "default"
     expected_evidence_kinds: ["KNXPROJ"]
-    expected_limitation_note_contains: "not implemented yet"
+    expected_limitation_notes: []
   - id: realistic-label
     session_label: "lab-session-2026-10-24"
     expected_setup: "default"
     expected_active_setup: "default"
     expected_evidence_kinds: ["KNXPROJ"]
-    expected_limitation_note_contains: ".knxproj content import"
+    expected_limitation_notes: []
   - id: label-with-underscore
     session_label: "my_session-1"
     expected_setup: "default"
     expected_active_setup: "default"
     expected_evidence_kinds: ["KNXPROJ"]
-    expected_limitation_note_contains: "not implemented"
+    expected_limitation_notes: []
 
 invalid:
   - id: empty

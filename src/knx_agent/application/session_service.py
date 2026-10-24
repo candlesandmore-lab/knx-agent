@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Sequence
 from pathlib import Path
 
 from knx_agent.contracts import (
@@ -16,8 +17,11 @@ from knx_agent.contracts import (
     DescribeSessionResponse,
     EvidenceKind,
     EvidenceSource,
+    InvalidatedReference,
     KnxAgentError,
     LogLevel,
+    ProjectChange,
+    ProjectImportInfo,
     ProjectImportSummary,
     ProjectRefreshInfo,
     ReimportSystemDefinitionResponse,
@@ -26,6 +30,7 @@ from knx_agent.contracts import (
 )
 from knx_agent.domain import SessionState
 
+from .import_support import limitation_notes
 from .log_book import SessionLogBook, parse_log_level
 from .project_refresh_guard import ProjectRefreshGuard
 from .session_lifecycle import SessionLifecycle
@@ -34,15 +39,21 @@ from .session_paths import resolve_session_root, state_path
 logger = logging.getLogger(__name__)
 
 
-def _envelope(state: SessionState, entry_id: int | None) -> ResponseEnvelope:
+def _envelope(
+    state: SessionState, entry_id: int | None, invalidated: Sequence[dict[str, object]] = ()
+) -> ResponseEnvelope:
     return ResponseEnvelope(
         setup=state.active_setup,
         evidence_sources=[
             EvidenceSource(kind=EvidenceKind.KNXPROJ, reference=state.source_project_absolute_path)
         ],
-        limitation_notes=[state.project_import.project_import_summary.limitation_note],
+        limitation_notes=limitation_notes(state.project_import, invalidated),
         log_book_entry_id=entry_id,
     )
+
+
+def _summary(state: SessionState) -> ProjectImportSummary:
+    return ProjectImportSummary(**state.project_import.project_import_summary.model_dump())
 
 
 class SessionService:
@@ -63,11 +74,15 @@ class SessionService:
     ) -> None:
         code = exc.error.code if isinstance(exc, KnxAgentError) else type(exc).__name__
         message = exc.error.message if isinstance(exc, KnxAgentError) else str(exc)
+        reason = exc.error.details.get("reason") if isinstance(exc, KnxAgentError) and exc.error.details else None
         logger.error("%s failed: %s: %s", capability, code, message)
         if work_directory is not None and state_path(work_directory).exists():
             try:
+                details: dict[str, object] = {"code": code, "message": message}
+                if reason is not None:
+                    details["reason"] = reason
                 SessionLogBook(work_directory, level).write(
-                    ERROR_LEVEL, capability, "default", f"{code}: {message}", {"code": code, "message": message}
+                    ERROR_LEVEL, capability, "default", f"{code}: {message}", details
                 )
             except OSError:
                 logger.exception("Could not write ERROR entry to the session log book")
@@ -94,9 +109,7 @@ class SessionService:
             work_directory=str(work_directory),
             session_state_path=str(state_path(work_directory)),
             source_project_absolute_path=state.source_project_absolute_path,
-            project_import_summary=ProjectImportSummary(
-                **state.project_import.project_import_summary.model_dump()
-            ),
+            project_import_summary=_summary(state),
             active_setup=state.active_setup,
             envelope=_envelope(state, entry_id),
         )
@@ -126,6 +139,16 @@ class SessionService:
             work_directory=state.work_directory,
             source_project_absolute_path=state.source_project_absolute_path,
             project_refresh=ProjectRefreshInfo(**state.project_refresh.model_dump()),
+            project_import=ProjectImportInfo(
+                imported_at=state.project_import.imported_at,
+                fingerprint=state.project_import.fingerprint,
+                graph_file=(
+                    str(Path(state.work_directory) / state.project_import.graph_file)
+                    if state.project_import.graph_file
+                    else None
+                ),
+                project_import_summary=_summary(state),
+            ),
             active_setup=state.active_setup,
             setups=[SetupSummary(name="default", current_system_state_summary="unknown")],
             trace_artifacts=list(state.trace_artifacts),
@@ -142,7 +165,7 @@ class SessionService:
         try:
             level = self._level(log_level)
             work_directory, state = self._open(session_label)
-            state, status, entry_id = self.guard.force(
+            outcome, status, entry_id = self.guard.force(
                 state, work_directory, SessionLogBook(work_directory, level)
             )
         except Exception as exc:
@@ -150,10 +173,8 @@ class SessionService:
             raise
         return ReimportSystemDefinitionResponse(
             project_refresh_status=status,  # type: ignore[arg-type]
-            project_import_summary=ProjectImportSummary(
-                **state.project_import.project_import_summary.model_dump()
-            ),
-            changes=[],
-            invalidated_references=[],
-            envelope=_envelope(state, entry_id),
+            project_import_summary=_summary(outcome.state),
+            changes=[ProjectChange(**change) for change in outcome.changes],  # type: ignore[arg-type]
+            invalidated_references=[InvalidatedReference(**ref) for ref in outcome.invalidated],  # type: ignore[arg-type]
+            envelope=_envelope(outcome.state, entry_id, outcome.invalidated),
         )

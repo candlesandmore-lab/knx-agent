@@ -1,0 +1,156 @@
+# Component typing rules CT0..CT4 (003 'Derivation: component typing'), evaluated strictly in this order.
+# Keys: id, component (fields of a component node; defaults: address 1, no IP, medium MT-0), overrides (CT0 table,
+# test-injected only), objects (compact: rx = write flag Enabled only, tx = transmit flag Enabled only,
+# both = both flags Enabled (counts in R and T), none = resolved with both flags Disabled, null_flags = resolved
+# but flags unknown (null: counts in neither), unresolved = definition_resolved false),
+# datapoint_types (assigned to one extra resolved object with no direction), then
+# expected: type, rule_id and the basis counts R (receive_object_count) and T (transmit_object_count).
+# R = objects with write flag Enabled, T = objects with transmit flag Enabled; an object may count in both.
+
+cases:
+  # CT0: override table, by each key, beats everything
+  - id: ct0-by-product-ref
+    component: {product_ref_id: M-1_H-1_P-A}
+    overrides: [{match: product_ref_id, value: M-1_H-1_P-A, type: ACTUATOR}]
+    objects: {tx: 3}
+    expected: {type: ACTUATOR, rule_id: CT0_OVERRIDE, receive: 0, transmit: 3}
+  - id: ct0-by-hardware2program-ref
+    component: {hardware2program_ref_id: M-1_H-1_HP-1}
+    overrides: [{match: hardware2program_ref_id, value: M-1_H-1_HP-1, type: SENSOR}]
+    objects: {rx: 3}
+    expected: {type: SENSOR, rule_id: CT0_OVERRIDE, receive: 3, transmit: 0}
+  - id: ct0-by-application-program
+    component: {application_program_id: M-1_A-1}
+    overrides: [{match: application_program_id, value: M-1_A-1, type: CONTROLLER}]
+    objects: {rx: 3}
+    expected: {type: CONTROLLER, rule_id: CT0_OVERRIDE, receive: 3, transmit: 0}
+  - id: ct0-beats-ct1-ip
+    component: {product_ref_id: M-1_H-1_P-A, has_ip_config: true}
+    overrides: [{match: product_ref_id, value: M-1_H-1_P-A, type: SENSOR}]
+    objects: {}
+    expected: {type: SENSOR, rule_id: CT0_OVERRIDE, receive: 0, transmit: 0}
+  - id: ct0-beats-ct2-coupler-and-ct3-no-objects
+    component: {address: 0, product_ref_id: M-1_H-1_P-A}
+    overrides: [{match: product_ref_id, value: M-1_H-1_P-A, type: ACTUATOR}]
+    objects: {}
+    expected: {type: ACTUATOR, rule_id: CT0_OVERRIDE, receive: 0, transmit: 0}
+  - id: ct0-no-match-falls-through
+    component: {product_ref_id: M-1_H-1_P-B}
+    overrides: [{match: product_ref_id, value: M-1_H-1_P-A, type: ACTUATOR}]
+    objects: {tx: 1}
+    expected: {type: SENSOR, rule_id: CT4_DIRECTION, receive: 0, transmit: 1}
+  - id: ct0-first-matching-entry-wins
+    component: {product_ref_id: M-1_H-1_P-A, application_program_id: M-1_A-1}
+    overrides:
+      - {match: application_program_id, value: M-1_A-1, type: SENSOR}
+      - {match: product_ref_id, value: M-1_H-1_P-A, type: ACTUATOR}
+    objects: {}
+    expected: {type: SENSOR, rule_id: CT0_OVERRIDE, receive: 0, transmit: 0}
+  - id: empty-override-table-is-the-default
+    component: {}
+    objects: {tx: 1}
+    expected: {type: SENSOR, rule_id: CT4_DIRECTION, receive: 0, transmit: 1}
+  # CT1: IP
+  - id: ct1-by-ip-config
+    component: {has_ip_config: true}
+    objects: {rx: 2}
+    expected: {type: IP_COUPLER_OR_INTERFACE, rule_id: CT1_IP, receive: 2, transmit: 0}
+  - id: ct1-by-medium-mt5
+    component: {medium_type_ref: MT-5}
+    objects: {tx: 2}
+    expected: {type: IP_COUPLER_OR_INTERFACE, rule_id: CT1_IP, receive: 0, transmit: 2}
+  - id: ct1-beats-ct2-device-number-zero
+    component: {address: 0, has_ip_config: true}
+    objects: {}
+    expected: {type: IP_COUPLER_OR_INTERFACE, rule_id: CT1_IP, receive: 0, transmit: 0}
+  - id: ct1-beats-ct3-no-objects
+    component: {medium_type_ref: MT-5}
+    objects: {}
+    expected: {type: IP_COUPLER_OR_INTERFACE, rule_id: CT1_IP, receive: 0, transmit: 0}
+  # CT2: device number 0
+  - id: ct2-device-number-zero
+    component: {address: 0}
+    objects: {rx: 1, tx: 1}
+    expected: {type: COUPLER, rule_id: CT2_COUPLER, receive: 1, transmit: 1}
+  - id: ct2-beats-ct3-zero-objects
+    component: {address: 0}
+    objects: {}
+    expected: {type: COUPLER, rule_id: CT2_COUPLER, receive: 0, transmit: 0}
+  # CT3: no resolved object
+  - id: ct3-zero-objects
+    component: {}
+    objects: {}
+    expected: {type: UNTYPED, rule_id: CT3_NO_OBJECTS, receive: 0, transmit: 0}
+  - id: ct3-only-unresolved-objects
+    component: {}
+    objects: {unresolved: 3}
+    expected: {type: UNTYPED, rule_id: CT3_NO_OBJECTS, receive: 0, transmit: 0}
+  # CT4: direction of the resolved objects
+  - id: ct4-receive-only
+    component: {}
+    objects: {rx: 2}
+    expected: {type: ACTUATOR, rule_id: CT4_DIRECTION, receive: 2, transmit: 0}
+  - id: ct4-transmit-only
+    component: {}
+    objects: {tx: 2}
+    expected: {type: SENSOR, rule_id: CT4_DIRECTION, receive: 0, transmit: 2}
+  - id: ct4-resolved-objects-without-direction
+    component: {}
+    objects: {none: 2}
+    expected: {type: UNTYPED, rule_id: CT4_DIRECTION, receive: 0, transmit: 0}
+  - id: ct4-unknown-flags-count-in-neither
+    component: {}
+    objects: {null_flags: 3}
+    expected: {type: UNTYPED, rule_id: CT4_DIRECTION, receive: 0, transmit: 0}
+  - id: ct4-unresolved-objects-do-not-count
+    component: {}
+    objects: {tx: 1, unresolved: 5}
+    expected: {type: SENSOR, rule_id: CT4_DIRECTION, receive: 0, transmit: 1}
+  - id: ct4-r-equals-2t-is-actuator
+    component: {}
+    objects: {rx: 4, tx: 2}
+    expected: {type: ACTUATOR, rule_id: CT4_DIRECTION, receive: 4, transmit: 2}
+  - id: ct4-r-equals-2t-minus-1-is-controller
+    component: {}
+    objects: {rx: 3, tx: 2}
+    expected: {type: CONTROLLER, rule_id: CT4_DIRECTION, receive: 3, transmit: 2}
+  - id: ct4-t-equals-2r-is-sensor
+    component: {}
+    objects: {rx: 2, tx: 4}
+    expected: {type: SENSOR, rule_id: CT4_DIRECTION, receive: 2, transmit: 4}
+  - id: ct4-t-equals-2r-minus-1-is-controller
+    component: {}
+    objects: {rx: 2, tx: 3}
+    expected: {type: CONTROLLER, rule_id: CT4_DIRECTION, receive: 2, transmit: 3}
+  - id: ct4-tie-is-controller
+    component: {}
+    objects: {rx: 2, tx: 2}
+    expected: {type: CONTROLLER, rule_id: CT4_DIRECTION, receive: 2, transmit: 2}
+  - id: ct4-r1-t1-is-controller
+    component: {}
+    objects: {rx: 1, tx: 1}
+    expected: {type: CONTROLLER, rule_id: CT4_DIRECTION, receive: 1, transmit: 1}
+  - id: ct4-r3-t2-is-controller
+    component: {}
+    objects: {rx: 3, tx: 2}
+    expected: {type: CONTROLLER, rule_id: CT4_DIRECTION, receive: 3, transmit: 2}
+  - id: ct4-object-with-both-flags-counts-in-both
+    component: {}
+    objects: {both: 1}
+    expected: {type: CONTROLLER, rule_id: CT4_DIRECTION, receive: 1, transmit: 1}
+  - id: ct4-both-flag-objects-mixed-with-receive
+    # R = 1 (rx) + 2 (both) = 3, T = 2 (both): 3 >= 4 no, 2 >= 6 no -> CONTROLLER
+    component: {}
+    objects: {rx: 1, both: 2}
+    expected: {type: CONTROLLER, rule_id: CT4_DIRECTION, receive: 3, transmit: 2}
+  - id: ct4-receive-dominant-with-both
+    # R = 2 (rx) + 1 (both) = 3, T = 1 (both): 3 >= 2 -> ACTUATOR
+    component: {}
+    objects: {rx: 2, both: 1}
+    expected: {type: ACTUATOR, rule_id: CT4_DIRECTION, receive: 3, transmit: 1}
+  # basis fields
+  - id: basis-datapoint-main-types-sorted-numeric-unique
+    component: {product_ref_id: M-1_H-1_P-A, application_program_id: M-1_A-1}
+    objects: {tx: 1}
+    datapoint_types: [DPST-9-1, DPST-1-1, DPT-9, DPST-5-10, DPST-10-1, "bogus"]
+    expected: {type: SENSOR, rule_id: CT4_DIRECTION, receive: 0, transmit: 1, object_count: 2, datapoint_main_types: ["1", "5", "9", "10"]}

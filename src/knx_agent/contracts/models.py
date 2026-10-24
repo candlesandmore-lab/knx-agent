@@ -84,14 +84,82 @@ class ErrorInfo(BaseModel):
     details: dict[str, object] | None = None
 
 
+class ImportWarning(BaseModel):  # noqa: A001 - name fixed by the spec
+    """One import warning: code, one-sentence message, location (zip entry or '<zip entry>#<ETS id>')."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    message: str
+    location: str
+
+
+class ApplicationProgramCounts(BaseModel):
+    """application_programs block of the summary: distinct programs referenced, read and unreadable."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    referenced: int = 0
+    read: int = 0
+    unreadable: int = 0
+
+
 class ProjectImportSummary(BaseModel):
-    """Summary of the project import (file name, archive entry count, limitation note)."""
+    """Summary of the project import (003 'project_import_summary')."""
 
     model_config = ConfigDict(extra="forbid")
 
     file_name: str
     archive_entry_count: int
-    limitation_note: str
+    ets_tool_version: str | None = None
+    schema_namespace: str | None = None
+    created_by: str | None = None
+    project_id: str | None = None
+    project_name: str | None = None
+    group_address_style: str | None = None
+    node_counts: dict[str, int] = Field(default_factory=dict)
+    relation_counts: dict[str, int] = Field(default_factory=dict)
+    component_type_counts: dict[str, int] = Field(default_factory=dict)
+    application_programs: ApplicationProgramCounts = Field(default_factory=ApplicationProgramCounts)
+    warning_total: int = 0
+    warning_counts: dict[str, int] = Field(default_factory=dict)
+    graph_file: str | None = None
+    graph_schema_version: int | None = None
+
+
+class ProjectChange(BaseModel):
+    """One entry of reimport_system_definition.changes (component or group address)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    entity: Literal["component", "group_address"]
+    change: Literal["added", "removed", "changed"]
+    id: str
+    label: str
+    details: dict[str, object] = Field(default_factory=dict)
+
+
+class InvalidatedReference(BaseModel):
+    """A scenario_state or mutation entry that names a component or group address removed by a re-import."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reference_kind: Literal["scenario_state", "mutation_delta"]
+    owner: str
+    component_id: str | None = None
+    group_address_id: str | None = None
+    reason: Literal["COMPONENT_REMOVED", "GROUP_ADDRESS_REMOVED"]
+
+
+class ProjectImportInfo(BaseModel):
+    """project_import block of describe_session (read from session-state.yaml only)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    imported_at: str
+    fingerprint: str | None = None
+    graph_file: str | None = None  # absolute path
+    project_import_summary: ProjectImportSummary
 
 
 class ProjectRefreshInfo(BaseModel):
@@ -151,8 +219,8 @@ class ReimportSystemDefinitionResponse(BaseModel):
 
     project_refresh_status: Literal["CHANGED", "UNCHANGED"]
     project_import_summary: ProjectImportSummary
-    changes: list[dict[str, object]] = Field(default_factory=list)
-    invalidated_references: list[dict[str, object]] = Field(default_factory=list)
+    changes: list[ProjectChange] = Field(default_factory=list)
+    invalidated_references: list[InvalidatedReference] = Field(default_factory=list)
     envelope: ResponseEnvelope
 
 
@@ -173,6 +241,7 @@ class DescribeSessionResponse(BaseModel):
     work_directory: str
     source_project_absolute_path: str
     project_refresh: ProjectRefreshInfo
+    project_import: ProjectImportInfo
     active_setup: str = "default"
     setups: list[SetupSummary] = Field(default_factory=list)
     trace_artifacts: list[dict[str, object]] = Field(default_factory=list)
