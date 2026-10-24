@@ -204,6 +204,10 @@ The four capabilities write no log book entry of their own, at any `log_level`; 
 
 No paging or result limit (a `FULL` listing of a whole project is large: narrow the selector or lower the level); component type is a coarse derived fact; parameter values are raw ETS strings; direction is flag based only; no routing and no simulated values (`current_value` is `unknown`); no purpose annotation (todo 14); a rejected request can still re-import a changed project (the refresh check comes first). Measured on the sample (28 components, 692 communication objects): every query call takes 0.02 to 0.04 s at every detail level; a `FULL` listing of all components is 1.25 MB of JSON.
 
+## Demo
+
+Hands-on tour of every CLI action on the sample project: [demo/README.md](demo/README.md); run `demo/run-all.sh`. The demo scripts live in `demo/`, use their own git-ignored session root `demo/.sessions` and are guarded by `tests/test_demo_scripts.py`.
+
 ## Test fixtures
 
 Test input data lives in YAML files, not in test modules. Tests use temporary session roots and small valid synthetic ETS 6 archives made by `tests/knxproj_builder.py` (a Python/YAML description plus named mutations for every error and warning case; only `zipfile` is used). The sample project is the real-world check.
@@ -233,12 +237,13 @@ Test input data lives in YAML files, not in test modules. Tests use temporary se
 | `tests/fixtures/query_error_cases.yaml`, `query_log_cases.yaml` | query failures and read-only logging |
 | `tests/fixtures/surface_cases.yaml` | SDK / CLI / MCP parity, option and argument names |
 | `tests/fixtures/sample_query_expectations.yaml` | golden structure of the sample for the query capabilities |
+| `tests/fixtures/demo_script_expectations.yaml` | expected exit codes, error codes and key output fields of the demo scripts |
 
 To add a case, append an entry with a unique `id`; no Python change is needed. Domain cases describe a graph in YAML (areas, lines, location tree, components, communication objects with flags and links, group addresses, parameters, warnings) that `tests/graph_factory.py` turns into a project graph, so they need no archive; service, SDK, CLI and MCP tests use archives from `tests/knxproj_builder.py`.
 
 ### Sample-based tests and skipping
 
-`tests/test_sample_project.py`, `tests/test_sample_queries.py` (golden structure of the four query capabilities: counts, ids and structure only, names are taken at run time) and `tests/test_xknxproject_crosscheck.py` skip (with the reason in the report) when `tests/lifedata/20261010-EFH-Armbruster.knxproj` is absent; the cross-check also skips when `xknxproject` is not installed (`uv sync` installs it from the dev group). In CI, run with `-rs` to see the skip reasons. The cross-check compares our graph with xknxproject: individual addresses and group addresses are equal; xknxproject lists only communication objects that have a group address link (677 on the sample, ours: 692), so the test compares per component on our objects that have a membership.
+`tests/test_sample_project.py`, `tests/test_sample_queries.py` (golden structure of the four query capabilities: counts, ids and structure only, names are taken at run time), `tests/test_demo_scripts.py` (runs every `demo/` script against the sample; its static checks of the demo folder run without the sample) and `tests/test_xknxproject_crosscheck.py` skip (with the reason in the report) when `tests/lifedata/20261010-EFH-Armbruster.knxproj` is absent; the cross-check also skips when `xknxproject` is not installed (`uv sync` installs it from the dev group). In CI, run with `-rs` to see the skip reasons. The cross-check compares our graph with xknxproject: individual addresses and group addresses are equal; xknxproject lists only communication objects that have a group address link (677 on the sample, ours: 692), so the test compares per component on our objects that have a membership.
 
 ## Run the tests
 

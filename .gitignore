@@ -237,6 +237,7 @@ agent-dev-agent/*
 
 # KNX agent runtimes
 .knx-agent/*
+demo/.sessions
 
 # Synology Drive
 .DS_Store

@@ -1,0 +1,124 @@
+schema_version: 1
+story:
+  id: 6
+  title: "Demo CLI scripts and guide for the ETS 6 sample project"
+  state: implemented
+  created_on: "2026-10-24"
+  last_updated_on: "2026-10-24"
+  source_todo:
+    - "development/todos/16-demo-cli-scripts.md"
+  actor: "End user (domain expert evaluating the current knx-agent implementation)"
+  goal: "Give the end user a hands-on, scripted way to see what the current knx-agent CLI can do on the committed ETS 6 Professional sample tests/lifedata/20261010-EFH-Armbruster.knxproj: from creating a session to every available CLI call, with a README that guides through them, and keep the demo alive as the product grows."
+  success_criteria:
+    - "demo/ contains exactly this user-confirmed (2026-10-24) inventory of numbered, runnable bash scripts calling the real knx-agent CLI for ALL seven implemented actions: 01-create-session.sh (session create, label demo-house); 02-describe-and-reimport.sh (session describe plain and with --log-level DEBUG; session reimport, UNCHANGED); 03-list-components.sh (list-components with ANY query by partial name, by individual address, by ETS id, by instance path with trailing '/', and with detail levels SUMMARY, MEDIUM, FULL); 04-describe-component.sh (describe-component of one component at MEDIUM and at FULL); 05-summarize-topology.sh (SUMMARY, MEDIUM, FULL); 06-trace-group-flow.sh (by group address, by partial group address name returning a set, by --object-ref); 07-errors.sh (three failing calls that print the error and must not stop the tour: session describe of a non-existent session -> SESSION_NOT_FOUND, describe-component with an unknown selector -> SELECTOR_UNRESOLVED, trace-group-flow with an unknown group address -> SELECTOR_UNRESOLVED; codes per the error taxonomy in docs/implementation/003 section 'Component inspection (story 05)' and 'Session service realisation (story 03)'); plus lib.sh, run-all.sh, cleanup.sh and README.md."
+    - "The scripts are specific to the sample but derive selectors (component names, individual addresses, ETS ids, instance paths, group addresses) from CLI output at run time instead of hard-coding personal names; they use the real CLI via `uv run knx-agent ...` from the repository root whatever the current directory is, take an optional session-root argument as first argument (default demo/.sessions, git-ignored; the scripts change into the repository root first, so a relative root resolves against the repository root, and an absolute path is used as given), use no environment variables, create the session label demo-house, and demo/cleanup.sh removes the session root (and refuses to delete anything outside a path ending in .sessions or a given root argument that is not a directory); demo/run-all.sh runs the whole tour."
+    - "demo/README.md guides the end user step by step in logical order from session creation to the setup actions: prerequisites, how to run each script (or all), for every call the command, its purpose and what to expect, how to read the JSON and the errors, how to clean up, and a maintenance section stating the standing rule that every new action or feature must add demo examples and keep existing ones working."
+    - "A pytest (skipped with a clear message when tests/lifedata/20261010-EFH-Armbruster.knxproj is absent) runs every demo script against the sample, passing an absolute temporary session root as the first argument, and asserts exit code 0 for the happy-path scripts and the documented error code and non-zero exit for the error examples, plus key fields of the output (not byte-exact snapshots), and checks that demo/README.md mentions every demo script, that all seven CLI actions appear in the scripts, and that no file under demo/ contains the sample owner's family name (the only allowed occurrence is the sample file name)."
+    - "The demo rule (canonical name 'demo rule') is added as one line to the todo files 05, 06, 07, 08, 09, 10, 11 and 14 ('Demo rule (todo 16): once implemented, add examples for new actions/features to ./demo (scripts and README) and keep existing demo scripts working.'); todos 12 (license governance) and 13 (fixtures and validation) add no user-facing actions and are excluded; later todos that add CLI actions follow the demo rule through the demo README maintenance section."
+  architecture_options:
+    - id: arch-a
+      label: "Thin bash wrappers around the real CLI with shared helper (chosen)"
+      description: "demo/lib.sh holds the repository-root resolution, the session-root argument handling, the printing helpers and the run-time selector derivation; numbered scripts source it; the pytest runs the scripts via subprocess."
+      trade_offs: "Transparent for the end user and no new product code; macOS/Linux shell only, which matches the development workspace. CHOSEN (decision 2026-10-24)."
+    - id: arch-b
+      label: "Python scripts invoking the CLI via subprocess"
+      description: "Demo scripts as Python files."
+      trade_offs: "More portable but less readable as 'what to type'. NOT chosen."
+  implementation_options:
+    - id: impl-a
+      label: "Run-time selector derivation with `uv run python -c` JSON parsing (chosen)"
+      description: "lib.sh calls the CLI, parses the JSON output with a one-line python through uv run (no jq dependency) to pick the first matching component, a placed component's instance path and a group address."
+      trade_offs: "No extra tool needed; slightly more shell code. CHOSEN."
+    - id: impl-b
+      label: "jq for JSON parsing"
+      description: "Use jq."
+      trade_offs: "Adds an external prerequisite. NOT chosen."
+  repository_context:
+    branch: story/06-demo-cli-scripts
+    base_commit: fcc9e27
+  current_implementation:
+    notes: "main (fcc9e27) contains stories 1-5. CLI: knx-agent session create --project <file> --session-label <label> [--session-root <dir>] [--log-level], session describe/reimport --session <label>, setup list-components [--query] [--selector-kind] [--detail-level], describe-component --component, summarize-topology, trace-group-flow (--group-address | --object-ref); JSON on stdout, errors as ErrorInfo JSON on stderr with exit code 1. Sample: tests/lifedata/20261010-EFH-Armbruster.knxproj (28 components, 26 placed in a Building/Floor/Room location tree, 695 group addresses, 692 communication objects). README.md documents the CLI. User decisions (2026-10-24): demo scripts are specific to the sample data and only need to work in this development workspace; real CLI; no environment variables; own git-ignored session root."
+    relevant_files:
+      - "README.md"
+      - "src/knx_agent/cli/app.py"
+      - "docs/implementation/003-proposed-capability-apis.md"
+      - "tests/lifedata/20261010-EFH-Armbruster.knxproj"
+      - "development/todos/16-demo-cli-scripts.md"
+    depends_on_stories:
+      - "development/backlog/implemented/02-package-skeleton-and-core-api.yaml"
+      - "development/backlog/implemented/03-session-service-and-project-refresh.yaml"
+      - "development/backlog/implemented/04-knxproj-import-and-project-graph.yaml"
+      - "development/backlog/implemented/05-component-inspection-capabilities.yaml"
+  guidelines:
+    - "Scripts call the real CLI; no mocks; no environment variables; repository-relative paths."
+    - "No personal names from the sample in scripts, README or tests: derive values at run time; the sample file name is the only place the family name appears."
+    - "The demo session root is demo/.sessions (git-ignored) or the session-root argument; cleanup.sh removes only that folder."
+    - "Scripts are specific to the sample and only need to work in this development workspace; the pytest skips when the sample is absent."
+    - "Error examples demonstrate the CLI behaviour (ErrorInfo JSON on stderr, exit code 1) and must not stop run-all.sh."
+    - "Canonical terms from docs/methodology/02-terminology-dictionary.md (component, instance path, location, session root, selector kind, detail level, direction label); the demo introduces no new term."
+    - "Use plain English in the README, aimed at a domain expert, not a software developer."
+    - "Deferred follow-up ids are development todo paths (accepted by the Shipped-Asset Alignment rule)."
+  impact_analysis:
+    methodology: "unchanged"
+    architecture: "unchanged"
+    implementation: "updated"
+    updated_documents: "demo/ (new folder: scripts, README.md), .gitignore (demo/.sessions), tests (demo pytest), development/todos/05, 06, 07, 08, 09, 10, 11 and 14 (demo rule line); README.md (link to demo/)."
+    solution_surface: "top_level_runtime: instructed; subagent_topology: instructed_agent_only (no coded sub-agent; scripts and tests built by python-creation-agent)."
+    phase_owners: "story drafting - story-telling-agent; architecture/spec/task plan - architect-planning-agent; implementation - python-creation-agent; review - review-validation-agent; validation - qa-agent."
+    invocation_surfaces: "CLI only is demonstrated; SDK and MCP are unchanged and not part of the demo (the README mentions them); none omitted from the product."
+  shipped_asset_alignment:
+    - asset: "coded-agent doc snapshots (src/agent_building_agent/docs/)"
+      decision: not_applicable
+      rationale: "No docs/architecture or docs/implementation content changes in this story; no coded agent lists the demo files."
+      follow_up_story_id: null
+    - asset: "instructed-agents/agents/* and skill markdown"
+      decision: not_applicable
+      rationale: "None embed or quote the demo folder or the todo files."
+      follow_up_story_id: null
+    - asset: "knx-agent agent-layer prompts and skills (src/knx_agent/agent_layer)"
+      decision: deferred
+      rationale: "Only an empty placeholder package exists; the agent layer (todo 11) may reuse the demo scenarios as examples and must extend the demo with its own."
+      follow_up_story_id: "development/todos/11-agent-layer.md"
+  development_cycle:
+    steps:
+      - "Verify story branch story/06-demo-cli-scripts and confirm the persisted story file in development/backlog/active."
+      - "Architecture and implementation-spec no-change decision; task plan (script list, helper design, pytest design); consolidated review gate."
+      - "Write demo/lib.sh, the numbered scripts, run-all.sh, cleanup.sh, demo/README.md and the .gitignore entry; add the demo rule line to the listed todos; link the demo from README.md."
+      - "Write the pytest that runs every script against the sample (temporary session root) with data-driven expectations in a YAML fixture."
+      - "Run the demo manually through run-all.sh; QA, implementation review gate, final alignment validation."
+    validation:
+      completed_on: "2026-10-24"
+      gates:
+        - "Story review passed (round 2 after three blocking points were resolved with the user-confirmed script inventory)."
+        - "Consolidated gate (steps 5-8) passed (plan clarified afterwards: second error call, cleanup edge cases, wording, definitions)."
+        - "Implementation gate passed (the review agent cannot read files; context was supplied inline)."
+        - "Final alignment verified by the calling agent against the surfaces below."
+      user_decisions:
+        - "2026-10-24: create todo 16 and run the normal flow; demo script inventory confirmed (01-create-session ... 07-errors, lib.sh, run-all.sh, cleanup.sh, README.md)."
+      executable_evidence:
+        - "pytest via MCP pytest_execution: 1119 passed (sample present); with the sample file hidden 1087 passed and 32 skipped with a clear message, including the 8 demo script tests that need the sample (file restored, size 7560559 bytes unchanged)."
+        - "qa-agent task qa-story-06-round-1: pass_fail_result yaml_validation=pass, pytest=pass; its prose asks for developer acceptance of the demo flow, which is requested from the user."
+        - "Manual tour: demo/run-all.sh with a throwaway session root exited 0, 'Tour complete: 7 of 7 scripts passed', 24 RESULT lines as expected (components=28, group_addresses=695, warnings=26; reimport UNCHANGED; by_address 1, by_ets_id 1, location query 9 ambiguous, flow by name 134 ambiguous, flow by object ref 1; errors SESSION_NOT_FOUND, SELECTOR_UNRESOLVED x2 with exit 1); about 9 s end to end."
+        - "Privacy: no file under demo/ contains the sample owner's family name except the sample file name (pytest check removes the exact file name string first); runtime output prints derived values such as location paths from the project."
+      impact_surface_verification:
+        methodology: "unchanged - no new terms; the plan defines 'demo rule' and 'family name' for this story only (README maintenance section)."
+        architecture: "unchanged - no architecture change."
+        implementation: "updated - the repository's own files (demo/, tests/test_demo_scripts.py, tests/fixtures/demo_script_expectations.yaml, .gitignore, README.md, development/todos); not docs/implementation."
+        code_and_tests: "demo/lib.sh, 01-07 scripts, run-all.sh, cleanup.sh (12 refusal cases and positive cases), README.md; tests/test_demo_scripts.py (31 tests)."
+        installation_assets: "demo/README.md guide; main README.md links the demo; demo/.sessions git-ignored."
+        todo_files: "demo rule line added to todos 05, 06, 07, 08, 09, 10, 11 and 14; a note in todos 12 and 13 that the rule applies only if they add user-facing actions."
+        shipped_assets: "per shipped_asset_alignment: two not_applicable, one deferred to todo 11."
+      deviations:
+        - "demo_show prints 'top-level values further down' when it truncates; run-all.sh skips cleanup.sh when an explicitly passed root does not exist yet; the test runner runs 01 first when a later script is selected alone; an extra test checks that the scripts exist and are executable."
+        - "The partial-name example is the first run of at least 4 letters or digits that matches at least 2 component names (fallback first 4 non-space characters); changed after the calling agent found the first 4-character rule awkward."
+        - "The default-root 'Nothing to clean' case of cleanup.sh is covered by the manual run only; shellcheck was not run (bash -n passes, macOS bash 3.2)."
+        - "Process: the sample file was renamed for a few minutes to verify the skip behaviour and restored; no rule breaches reported by the implementer."
+    review_findings: []
+    deferred_items:
+      - item: "Demo examples for upcoming actions and features (bus traces, scenario state, expectation engine, mutations, enrichment, further adapters, agent layer, purpose annotation)"
+        reason: "Each of those todos extends the demo once implemented (standing demo rule)."
+        follow_up: "development/todos/05-bus-trace-ingestion.md"
+      - item: "Demo of the SDK and MCP surfaces"
+        reason: "Out of scope; the demo shows the CLI only."
+        follow_up: "development/todos/10-cli-and-mcp-adapters.md"
+  open_questions: []

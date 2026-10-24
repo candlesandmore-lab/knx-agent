@@ -4,3 +4,5 @@ Goal: declarative rule-based propagation through group addresses and participant
 Answered: `now` = state after applying ALL prior inputs in order of provision; "unknown, please provide input X" is a valid answer (three-valued, not binary); answers carry evidence sources and unresolved assumptions and write to the session log book; must support should/why/why-not/what-changed/what-input-caused-this; KNX component communication (sensor -> group address -> actuator and other readers) must be modelled. "All options" scenarios are built by the agent from multiple mutations.
 Not in scope for the engine: original-vs-mutated comparison (agent level).
 Depends on: 04, 05, 06
+
+Demo rule (todo 16): once implemented, add examples for new actions/features to ./demo (scripts and README) and keep existing demo scripts working.

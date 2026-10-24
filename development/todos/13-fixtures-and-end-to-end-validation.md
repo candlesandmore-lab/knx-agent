@@ -4,3 +4,5 @@ Goal: sanitized `.knxproj` and trace fixtures, graph/decoding snapshots, session
 Depends on: 03-11 (fixtures needed earlier by 04/05)
 
 Additional information (user, 2026-10-24): real data is ETS 6 Professional. First real project sample: `tests/lifedata/20261010-EFH-Armbruster.knxproj` (committed by user decision; contains personal data). Bus traces are ETS 6 Professional bus monitor exports (sample still to be supplied under `tests/lifedata/`). Tests that need real data run against tests/lifedata and skip with a clear message when a file is absent; small synthetic `.knxproj` fixtures remain for fast tests.
+
+Note: the demo rule of todo 16 does not apply to this todo unless it adds user-facing actions (then add examples to ./demo).

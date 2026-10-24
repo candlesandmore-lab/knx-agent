@@ -4,3 +4,5 @@ Goal: for one representative device family, fetch vendor documentation, extract 
 Blocker: user must name sanctioned documentation sources and the first device family; scraping legality open.
 Note: FULL detail level must include enriched data/purpose when available.
 Depends on: 04, 07
+
+Demo rule (todo 16): once implemented, add examples for new actions/features to ./demo (scripts and README) and keep existing demo scripts working.

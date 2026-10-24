@@ -4,3 +4,5 @@ Goal: the solution understands sensor and actor purpose and annotates the KNX sy
 Note: no existing todo/task-plan item owned this; the task plan only has "device typing".
 Open: rule source for purpose mapping (curated table vs. vendor data), see todo 09.
 Depends on: 04 (refined by 09)
+
+Demo rule (todo 16): once implemented, add examples for new actions/features to ./demo (scripts and README) and keep existing demo scripts working.

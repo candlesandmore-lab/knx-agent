@@ -5,3 +5,5 @@ Open: any license families to exclude beyond generally-free ones.
 Depends on: starts with 02, continuous
 
 Additional information (user, 2026-10-24): repository LICENSE is MIT. `xknxproject` is GPL-2.0 (upstream sidebar; no permissive reading found) and is therefore only allowed as a development-time cross-check in tests (dev dependency group, never a runtime dependency, no code copied). Pyyaml (runtime since story 03), pydantic, typer, mcp, hatchling and any XML parser (lxml) need license records.
+
+Note: the demo rule of todo 16 does not apply to this todo unless it adds user-facing actions (then add examples to ./demo).

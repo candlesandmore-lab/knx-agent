@@ -3,9 +3,10 @@
 Resume rule: read this file, then verify reality (git status, `uv run pytest` through the MCP pytest tool) before trusting it.
 
 ## Where the work stands
-- Stories 01-05 are implemented (see `development/backlog/implemented/`). `main` contains stories 01-04 (fast-forwarded to 435d281 by user request, not pushed). Story 05 (todo 15, component inspection capabilities) is committed on branch `story/05-component-inspection-capabilities` (not yet on main; the user decides when main is updated).
+- Stories 01-06 are implemented (see `development/backlog/implemented/`). `main` contains stories 01-05 (fast-forwarded to fcc9e27 by user request, not pushed). Story 06 (todo 16, demo CLI scripts in `./demo`, README guide, demo rule in the upcoming todos) is committed on branch `story/06-demo-cli-scripts` (not yet on main; the user decides when main is updated). The user should try `demo/run-all.sh` and accept the demo flow.
 - No active story. `development/backlog/active` and `open` are empty.
-- Test suite: 1088 tests pass (1064 + 24 skips when `tests/lifedata/20261010-EFH-Armbruster.knxproj` is absent).
+- DEMO RULE (todo 16): every upcoming todo that adds actions or features (05, 06, 07, 08, 09, 10, 11, 14 and later) must, once implemented, add examples to `./demo` (scripts + README) and keep existing demo scripts and `tests/test_demo_scripts.py` working.
+- Test suite: 1119 tests pass (1087 + 32 skips when `tests/lifedata/20261010-EFH-Armbruster.knxproj` is absent).
 - Implemented capabilities (SDK `KnxSessionClient`, CLI `knx-agent ...`, MCP `knx-agent-mcp`): create_session, describe_session, reimport_system_definition, list_components, describe_component, summarize_topology, trace_group_flow.
 
 ## Remaining todos (development/todos)

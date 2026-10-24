@@ -4,3 +4,5 @@ Goal: session-scoped, resettable scenario state; environment model (sensor-orien
 Answered: the .knxproj holds no sensor values; values live in KNX system state, set by user override or trace. Sensors are addressed by NAME (found via todo 04/14); scope = the actual sensor, and the effect must ripple down to the components that read its group address; units normalised to ETS/KNX datapoint types; last-come-wins across user input and trace; environment model = primary inputs, KNX system state = simulated result. Gestures (long press, dimming, double press, scenes) only where configured in the knxproj; unresolvable action = error; every input goes to the session log book. Mapping human phrases to telegrams is the agent layer (todo 11).
 Open: is environment/state per mutation or per session (see todo 01).
 Depends on: 03, 04
+
+Demo rule (todo 16): once implemented, add examples for new actions/features to ./demo (scripts and README) and keep existing demo scripts working.

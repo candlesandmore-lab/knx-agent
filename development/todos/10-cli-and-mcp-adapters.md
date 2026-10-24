@@ -4,3 +4,5 @@ Goal: expose every delivered capability on SDK, `typer` CLI (e.g. `knx-agent ses
 Open: MCP hosting mode, local CLI + VS Code vs. remote service.
 Note: the use cases define "user" as human (CLI), program (SDK) or agent (MCP); MCP is the agent-facing surface.
 Depends on: 02 (then incremental with 03-09)
+
+Demo rule (todo 16): once implemented, add examples for new actions/features to ./demo (scripts and README) and keep existing demo scripts working.

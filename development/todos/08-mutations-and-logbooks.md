@@ -5,3 +5,5 @@ Answered: parameters only (no groups/topology/names); multiple parallel named mu
 Open: whether environment/state is per mutation (todo 01).
 Depends on: 03, 04
 Follow-up from story 03 (catalogue update): log level ERROR was added (always written, severity above INFO); read_session_log_book min_level / --min-level must accept ERROR, INFO, DEBUG, FULL. See docs/implementation/003-proposed-capability-apis.md.
+
+Demo rule (todo 16): once implemented, add examples for new actions/features to ./demo (scripts and README) and keep existing demo scripts working.
