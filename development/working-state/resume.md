@@ -10,6 +10,7 @@ Resume rule: read this file, then verify reality (git status, `uv run pytest` th
 - Implemented capabilities (SDK `KnxSessionClient`, CLI `knx-agent ...`, MCP `knx-agent-mcp`): create_session, describe_session, reimport_system_definition, list_components, describe_component, summarize_topology, trace_group_flow.
 
 ## Remaining todos (development/todos)
+- WORK ORDER: see `development/todos/00-implementation-order.md` (agreed with the user 2026-10-24; first step: merge story 6 if agreed, commit todos 00/05.1/17, then todo 17 module-instance support). New todo 17 was added (module instances: component P-051B-0_DI-37 unresolved).
 - 05 bus-trace ingestion: BLOCKED on a sample ETS 6 Professional bus monitor trace file from the user (XML or CSV export; put it under tests/lifedata/).
 - 06 environment/user action/scenario state, 07 expectation engine, 08 mutations and logbooks (log book filter must accept ERROR; MUTATION_NOT_FOUND placeholder exists), 09 component knowledge enrichment, 10 CLI/MCP adapters (largely delivered per capability; review what remains), 11 agent layer, 12 dependency license governance (records for lxml-not-used, xknxproject dev-only GPL-2.0, pyyaml, pydantic, typer, mcp), 13 fixtures and end-to-end validation, 14 component purpose annotation.
 - Open verification items: meaning of the order of group address links (first link = sender?) unverified, real ETS 6 scene structure unverified (sample has none).
