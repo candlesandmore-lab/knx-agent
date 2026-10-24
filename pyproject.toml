@@ -7,15 +7,16 @@ dependencies = [
     "pydantic>=2",
     "typer>=0.12",
     "mcp>=2,<3",
+    "pyyaml>=6",
 ]
 
 [project.scripts]
 knx-agent = "knx_agent.cli:main"
+knx-agent-mcp = "knx_agent.adapters.mcp:mcp"
 
 [dependency-groups]
 dev = [
     "pytest>=8.0",
-    "pyyaml>=6",
     # Development tooling: keeps agent-dev-agent in the lock file so a plain `uv sync` does not remove it.
     "agent-building-agent",
 ]

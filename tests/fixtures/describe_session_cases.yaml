@@ -1,28 +1,30 @@
 # Data-driven cases for the describe_session capability.
 # Edit or add entries here; tests parametrize from this file (see tests/conftest.py).
 #
-# valid:   session_label accepted; expectations are checked against the response.
-# invalid: session_label rejected with a KnxAgentError carrying expected_error_code.
+# valid:   session is created with session_label under a temporary session root, then described;
+#          expectations are checked against the response.
+# invalid: session_label rejected with a KnxAgentError carrying expected_error_code
+#          (no session with that label exists).
 
 valid:
   - id: simple-label
     session_label: "x"
     expected_setup: "default"
     expected_active_setup: "default"
-    expected_evidence_sources: []
+    expected_evidence_kinds: ["KNXPROJ"]
     expected_limitation_note_contains: "not implemented yet"
   - id: realistic-label
     session_label: "lab-session-2026-10-24"
     expected_setup: "default"
     expected_active_setup: "default"
-    expected_evidence_sources: []
-    expected_limitation_note_contains: "placeholder"
-  - id: label-with-inner-spaces
-    session_label: "my session"
+    expected_evidence_kinds: ["KNXPROJ"]
+    expected_limitation_note_contains: ".knxproj content import"
+  - id: label-with-underscore
+    session_label: "my_session-1"
     expected_setup: "default"
     expected_active_setup: "default"
-    expected_evidence_sources: []
-    expected_limitation_note_contains: "todo 03"
+    expected_evidence_kinds: ["KNXPROJ"]
+    expected_limitation_note_contains: "not implemented"
 
 invalid:
   - id: empty
@@ -34,3 +36,12 @@ invalid:
   - id: whitespace-tab-newline
     session_label: "\t\n"
     expected_error_code: "INVALID_REQUEST"
+  - id: unknown-label
+    session_label: "never-created"
+    expected_error_code: "SESSION_NOT_FOUND"
+  - id: label-with-inner-space
+    session_label: "my session"
+    expected_error_code: "SESSION_NOT_FOUND"
+  - id: label-with-path-separator
+    session_label: "../escape"
+    expected_error_code: "SESSION_NOT_FOUND"

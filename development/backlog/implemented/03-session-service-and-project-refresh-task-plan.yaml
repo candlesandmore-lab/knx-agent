@@ -1,0 +1,117 @@
+# Copyright (c) 2026 agent-building-agent contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Source: https://TBD (training course)
+
+story_task_plan:
+  story: "development/backlog/active/03-session-service-and-project-refresh.yaml"
+  spec_reference: "docs/implementation/003-proposed-capability-apis.md (section 'Session service realisation (story 03)', capabilities 1-3, C1, C6, C7)"
+  existing_code_note: "src/knx_agent exists from story 02: KnxSessionClient.describe_session, application/describe_session.py (PLACEHOLDER to be replaced), typer app in cli/app.py (session describe), MCPServer in adapters/mcp/server.py, contracts/models.py + errors.py (KnxAgentError carrying ErrorInfo), tests/fixtures/describe_session_cases.yaml (placeholder expectations must be updated)."
+  ordered_tasks:
+    - id: T1
+      owner: python-creation-agent
+      title: "Contracts and error codes"
+      description: "In knx_agent.contracts add CreateSessionRequest/Response, ReimportSystemDefinitionRequest/Response (project_refresh_status CHANGED|UNCHANGED, project_import_summary, changes [], invalidated_references []), and extend DescribeSessionResponse with the catalogue 3 fields (work_directory, source_project_absolute_path, project_refresh, setups, trace_artifacts, log_book_references). Add LogLevel enum INFO|DEBUG|FULL with ordering. Keep KnxAgentError/ErrorInfo; new codes SESSION_LABEL_INVALID, SESSION_LABEL_EXISTS, SESSION_NOT_FOUND, PROJECT_FILE_UNREADABLE, PROJECT_PARSE_ERROR, INVALID_LOG_LEVEL. contracts imports nothing from knx_agent."
+      depends_on: []
+      done_when: "Models validate and serialise; error codes available as constants; contracts tests pass."
+    - id: T2
+      owner: python-creation-agent
+      title: "Session state model and atomic I/O"
+      description: "Pydantic model SessionState with exactly the field list in 003 (session_label, created_at, work_directory, source_project_absolute_path, project_import incl. fingerprint null, project_refresh, active_setup, trace_artifacts, scenario_state, mutations, log_book_references, mutation_log_book_references). Read/write via PyYAML (safe_load/safe_dump, stable key order); write = temp file in same folder + os.replace. Place pure model in domain, I/O in application (or a storage adapter module respecting import direction)."
+      depends_on: [T1]
+      done_when: "Round trip is lossless; a simulated failure during write leaves the previous file intact."
+    - id: T3
+      owner: python-creation-agent
+      title: ".knxproj guard"
+      description: "Function that checks the file exists and is readable (PROJECT_FILE_UNREADABLE) and is a valid zip archive (PROJECT_PARSE_ERROR, zipfile); returns file metadata (mtime_ns, size) and a summary (file name, entry count, limitation_note). No content parsing."
+      depends_on: [T1]
+      done_when: "Missing, unreadable, non-zip and valid-zip inputs yield the expected code or summary."
+    - id: T4
+      owner: python-creation-agent
+      title: "Session root resolution and label rules"
+      description: "Resolve session root: explicit parameter else ./.knx-agent/sessions; NO environment variable read. Validate session_label (non-empty, [A-Za-z0-9_-]); for create blank/invalid -> SESSION_LABEL_INVALID; for existing-session calls blank -> INVALID_REQUEST, other invalid -> SESSION_NOT_FOUND. Work-directory = root/label (absolute)."
+      depends_on: [T1]
+      done_when: "Label and root cases from the YAML fixtures pass; test proves env vars are ignored."
+    - id: T5
+      owner: python-creation-agent
+      title: "KNX session log book writer"
+      description: "Append-only JSON Lines writer for session-log-book.jsonl with entry_id (int from 1), timestamp, level, capability, setup, summary, details; writes non-ERROR entries only if entry level <= call log_level (INFO<DEBUG<FULL); ERROR entries are ALWAYS written; returns entry_id or None. Initialises the empty file at session creation. Logging uses the Python standard logging module (logger 'knx_agent' and children via logging.getLogger(__name__)); every issue (failed refresh check, missing/unreadable file, failed re-import, any raised KnxAgentError) is logged at ERROR to the Python logger and, when a session work-directory exists, to the log book as level ERROR. No custom logging code beyond configuring a handler in the CLI and MCP entry points (T7). Log points per the log_point_matrix below."
+      depends_on: [T1]
+      done_when: "Level filtering, ERROR-always-written, id sequencing, append-only behaviour and Python logger records (caplog) are tested."
+    - id: T6
+      owner: python-creation-agent
+      title: "SessionLifecycle, ProjectRefreshGuard and session service"
+      description: "Replace the describe_session placeholder. SessionLifecycle: create (error order label, readable, zip, exists; temp sibling folder .<label>.creating-<token> then rename; cleanup on any failure), lookup, describe. ProjectRefreshGuard: compare existence/mtime/size to project_import; unchanged -> no write; changed -> re-import, atomic state update (reimport_count, last_reimported_at); missing/unreadable -> PROJECT_FILE_UNREADABLE with state untouched; forced mode for reimport_system_definition (CHANGED/UNCHANGED, always updates imported_at). Service composes both and runs the guard first in every public session-scoped operation (describe, reimport). All in application layer."
+      depends_on: [T2, T3, T4, T5]
+      done_when: "create/describe/reimport behave per success criteria 1-5 at core level, incl. idempotent unchanged check (byte-identical session-state.yaml)."
+    - id: T7
+      owner: python-creation-agent
+      title: "SDK, CLI and MCP exposure"
+      description: "KnxSessionClient(session_root=None, log_level=INFO) with create_session(project_path, session_label), describe_session(session_label), reimport_system_definition(session_label); log_level also accepted per call per C6. CLI: knx-agent session create --project <file> --session-label <label>, session describe --session <label>, session reimport --session <label>, each with --session-root <dir> and (create/reimport) --log-level; JSON output, errors as ErrorInfo JSON on stderr with exit code 1 (as story 02). MCP: tools create_session, describe_session, reimport_system_definition; startup arguments --session-root and --log-level parsed in the server entry; add console script knx-agent-mcp -> knx_agent.adapters.mcp:mcp in pyproject [project.scripts] (user decision 2026-10-24). CLI and MCP entry points configure a standard logging handler for logger 'knx_agent' (stderr; MCP must not write to stdout). Adapters import only sdk and contracts."
+      depends_on: [T6]
+      done_when: "All three operations reachable on SDK, CLI and MCP; import-direction test still passes."
+    - id: T8
+      owner: python-creation-agent
+      title: "Fixtures and tests"
+      description: "Data-driven YAML fixtures under tests/fixtures (e.g. session_label_cases.yaml, create_session_error_cases.yaml, refresh_change_cases.yaml with mtime/size change kinds, log_level_cases.yaml); update describe_session_cases.yaml for the real service. Tests use tmp_path only and build small synthetic .knxproj zips in the tests (zipfile) incl. non-zip and empty file. SDK-first tests: create success/each error + order, atomic create leaves no folder on failure, uniqueness, SESSION_NOT_FOUND, refresh auto re-import on mtime change and on size change, idempotency (two runs identical state), missing file during refresh keeps state, atomic state write failure, log book entries per log_point_matrix at INFO and DEBUG, ERROR entries written at every configured log_level (INFO, DEBUG, FULL) when a session exists, Python logging ERROR records captured with caplog (logger knx_agent, also for failures before a session exists, e.g. failed create_session), no env var influence (monkeypatch env vars and assert no effect). Add fixtures log_level_cases.yaml covering the ERROR rows. Then adapter delegation tests (CLI CliRunner incl. --session-root, MCP) and import-direction test."
+      depends_on: [T7]
+      done_when: "pytest from the repository root passes via the MCP pytest tool."
+    - id: T9
+      owner: python-creation-agent
+      title: "Dependency and README"
+      description: "Move pyyaml>=6 from the dev group to runtime dependencies in pyproject.toml and refresh uv.lock through the MCP execution tool (uv lock/sync); keep it out of duplicated dev entries. README.md: document --session-root, session_root=, MCP startup arguments, default root, session folder layout, log book file, known mtime/size limitation, single-writer assumption. Note pyyaml for the later license record (todo 12)."
+      depends_on: [T7]
+      done_when: "uv sync succeeds on a clean checkout; README sections present."
+    - id: T10
+      owner: qa-agent
+      title: "Executable validation"
+      description: "Run uv sync and full pytest via MCP tools; check each story success criterion with evidence; verify CLI end-to-end in a tmp folder with a synthetic .knxproj (create, describe, modify file, describe again, reimport); check no 'session_id', 'logbook' or active-session wording in new code, docs and README; fill coverage gaps."
+      depends_on: [T8, T9]
+      done_when: "All six story success criteria have passing evidence."
+  parallelizable_tasks:
+    - "After T1: T2, T3, T4 and T5 touch disjoint modules and are safe to run in parallel (or in any order)."
+    - "After T7: T8 (tests) and T9 (pyproject/README) are safe in parallel; T9 edits pyproject.toml and uv.lock only, T8 only tests/."
+    - "NOT safe to parallelise: T1 first (shared contracts), T6 needs T2-T5, T7 needs T6, T10 last. Overall: the chain is mostly sequential; run sequentially by default and parallelise only T2-T5."
+  log_point_matrix:
+    - {point: "Session created", capability: create_session, level: INFO, written_when: "after atomic rename and state write"}
+    - {point: "Explicit re-import done", capability: reimport_system_definition, level: INFO, written_when: "after state write"}
+    - {point: "Refresh check unchanged", capability: "calling capability", level: DEBUG, written_when: "state not rewritten; log entry only"}
+    - {point: "Refresh check changed, automatic re-import done", capability: "calling capability", level: INFO, written_when: "after state write"}
+    - {point: "Any failure (refresh check failed, file missing/unreadable, failed re-import, any raised catalogue error)", capability: "calling capability", level: ERROR, written_when: "always, whatever log_level; to Python logger 'knx_agent' and, if a session exists, to the log book; state unchanged"}
+    - {point: "describe_session", capability: describe_session, level: none, written_when: "read-only, no entry"}
+  prerequisite_artifacts:
+    - "docs/implementation/003-proposed-capability-apis.md (section 'Session service realisation (story 03)')"
+    - "docs/architecture/001-knx-investigation-platform.md section 2b"
+    - "docs/methodology/02-terminology-dictionary.md (read only; 'session root' not yet a dictionary row)"
+    - "development/backlog/active/03-session-service-and-project-refresh.yaml"
+    - "src/knx_agent (story 02 code)"
+  review_checkpoints:
+    - "After T1: contracts match catalogue 1-3 and C7 without renamed fields."
+    - "After T6: guard lives in the application layer; failed create leaves no folder; state writes atomic."
+    - "After T7: adapters import only sdk and contracts; no environment variable is read anywhere; knx-agent-mcp script registered; only handler configuration (no custom logging code) in entry points."
+    - "After T10: consolidated implementation review gate by review-validation-agent."
+  completion_conditions:
+    - "create_session, describe_session and reimport_system_definition work on SDK, CLI and MCP with --session-root / session_root=."
+    - "Every session-scoped call runs the refresh check; unchanged check is idempotent."
+    - "session-state.yaml and session-log-book.jsonl match the 003 specification."
+    - "pytest passes; pyyaml is a runtime dependency and uv.lock is updated; README documents the new options."
+    - "All Python, pytest, YAML-validation and git operations ran through the MCP execution tools."
+  solution_surface: instructed_agent_only
+  top_level_runtime: instructed
+  subagent_topology:
+    - "instructed_agent_only: no coded sub-agent; the Python package is built by python-creation-agent."
+  phase_owners:
+    story_drafting: story-telling-agent
+    architecture_implementation_spec_and_task_plan: architect-planning-agent
+    python_implementation: python-creation-agent
+    review_gates: review-validation-agent
+    executable_validation: qa-agent
+  invocation_surfaces:
+    sdk:
+      status: generated
+      rationale: null
+    cli:
+      status: generated
+      rationale: null
+    mcp:
+      status: generated
+      rationale: null

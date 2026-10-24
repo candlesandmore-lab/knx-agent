@@ -690,6 +690,7 @@ source = { editable = "." }
 dependencies = [
     { name = "mcp" },
     { name = "pydantic" },
+    { name = "pyyaml" },
     { name = "typer" },
 ]
 
@@ -697,13 +698,13 @@ dependencies = [
 dev = [
     { name = "agent-building-agent" },
     { name = "pytest" },
-    { name = "pyyaml" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "mcp", specifier = ">=2,<3" },
     { name = "pydantic", specifier = ">=2" },
+    { name = "pyyaml", specifier = ">=6" },
     { name = "typer", specifier = ">=0.12" },
 ]
 
@@ -711,7 +712,6 @@ requires-dist = [
 dev = [
     { name = "agent-building-agent", path = "agent-dev-agent/agent-dev-agent/agent_building_agent-0.6.2-py3-none-any.whl" },
     { name = "pytest", specifier = ">=8.0" },
-    { name = "pyyaml", specifier = ">=6" },
 ]
 
 [[package]]

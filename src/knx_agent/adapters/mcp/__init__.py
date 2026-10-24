@@ -1,5 +1,19 @@
 """MCP tool adapter (mcp `MCPServer`); delegates to the SDK only."""
 
-from .server import describe_session, mcp, server
+from .server import (
+    create_session,
+    describe_session,
+    mcp,
+    parse_startup_arguments,
+    reimport_system_definition,
+    server,
+)
 
-__all__ = ["describe_session", "mcp", "server"]
+__all__ = [
+    "create_session",
+    "describe_session",
+    "mcp",
+    "parse_startup_arguments",
+    "reimport_system_definition",
+    "server",
+]

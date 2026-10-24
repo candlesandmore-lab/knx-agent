@@ -1,0 +1,29 @@
+# session_label rules.
+# valid_for_create:   accepted by create_session.
+# invalid_for_create: create_session raises SESSION_LABEL_INVALID (project file is valid in these cases).
+# existing_session_calls: describe_session / reimport_system_definition on a label that was never created.
+
+valid_for_create:
+  - {id: lowercase, label: "house"}
+  - {id: mixed-case-digits, label: "House42"}
+  - {id: dash-underscore, label: "a-b_c"}
+  - {id: single-char, label: "x"}
+  - {id: only-digits, label: "2026"}
+
+invalid_for_create:
+  - {id: empty, label: ""}
+  - {id: spaces, label: "   "}
+  - {id: inner-space, label: "my session"}
+  - {id: slash, label: "a/b"}
+  - {id: parent-dir, label: ".."}
+  - {id: leading-dot, label: ".hidden"}
+  - {id: umlaut, label: "küche"}
+  - {id: trailing-newline, label: "abc\n"}
+  - {id: dot, label: "a.b"}
+
+existing_session_calls:
+  - {id: blank, label: "", expected_code: INVALID_REQUEST}
+  - {id: whitespace, label: "  ", expected_code: INVALID_REQUEST}
+  - {id: unknown-valid-label, label: "ghost", expected_code: SESSION_NOT_FOUND}
+  - {id: invalid-characters, label: "a b", expected_code: SESSION_NOT_FOUND}
+  - {id: path-traversal, label: "../x", expected_code: SESSION_NOT_FOUND}

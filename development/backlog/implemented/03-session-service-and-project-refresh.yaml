@@ -1,0 +1,136 @@
+schema_version: 1
+story:
+  id: 3
+  title: "Implement investigation session lifecycle and project refresh"
+  state: implemented
+  created_on: "2026-10-24"
+  last_updated_on: "2026-10-24"
+  source_todo:
+    - "development/todos/03-session-service-and-project-refresh.md"
+  actor: "End user (domain expert investigating a KNX installation)"
+  goal: "Provide a working investigation-session lifecycle on SDK, CLI and MCP: create_session (mandatory .knxproj guard), describe_session with real persisted data, reimport_system_definition, and an automatic project refresh check on every public session-scoped call. A session is addressed only by its user-chosen session_label, lives in <session_root>/<session_label>, persists its metadata in session-state.yaml, and starts a KNX session log book, so later slices can rely on a self-healing session contract."
+  success_criteria:
+    - "create_session(project_path, session_label) on SDK (KnxSessionClient), CLI (knx-agent session create --project <file> --session-label <session_label>) and MCP (create_session) rejects a missing or unreadable file (PROJECT_FILE_UNREADABLE) and a file that is not a .knxproj zip archive (PROJECT_PARSE_ERROR); describe_session and reimport_system_definition (CLI session describe / session reimport, MCP tools of the same name) return the catalogue responses from docs/implementation/003 (capabilities 1-3) including the C7 envelope; describe_session replaces the placeholder from story 02 with real persisted data."
+    - "A session_label is non-empty, uses letters, digits, - and _ only (else SESSION_LABEL_INVALID) and is unique under the session root (else SESSION_LABEL_EXISTS); the work-directory is <session_root>/<session_label>; session_root defaults to ./.knx-agent/sessions and is set via the CLI option --session-root, the MCP server startup argument --session-root and the SDK parameter session_root= on KnxSessionClient; no environment variable is read; an unknown session_label yields SESSION_NOT_FOUND. create_session validates in this order: session_label validity (SESSION_LABEL_INVALID), project file readability (PROJECT_FILE_UNREADABLE), archive validity (PROJECT_PARSE_ERROR), label uniqueness (SESSION_LABEL_EXISTS); it is atomic (work-directory is built in a temporary sibling folder and renamed, and removed on any failure), so a failed create never leaves a folder that blocks the label."
+    - "session-state.yaml is written at creation and kept current with: session_label, created_at, work_directory, source_project_absolute_path, project_import (path, mtime, size, imported_at, project_import_summary with a limitation note that .knxproj content import is not implemented yet, fingerprint: null), project_refresh, active_setup (default), trace_artifacts [], scenario_state [], mutations [], log_book_references and mutation_log_book_references; there is no separate session_id and no implicit active session."
+    - "Every public session-scoped SDK operation (CLI and MCP go through the SDK) first runs the refresh check comparing path existence, mtime and size with the stored project_import; a difference triggers an automatic re-import and an updated project_refresh before the operation proceeds; reimport_system_definition forces the same re-read and reports CHANGED or UNCHANGED; the check is idempotent (two runs without a project change give identical session-state.yaml content and no re-import). If the bound file is missing or unreadable during a refresh, the operation fails with PROJECT_FILE_UNREADABLE and session-state.yaml stays unchanged; session-state.yaml is always written atomically (temporary file then rename) so a failed re-import leaves the previous state intact. Known limitation until the fingerprint exists (todo 04): a content change that keeps mtime and size is not detected; reimport_system_definition covers that case manually."
+    - "The KNX session log book is initialised at creation as the append-only JSON Lines file session-log-book.jsonl in the work-directory with entries of entry_id, timestamp, level, capability, setup, summary and details; lifecycle events (create, automatic re-import, explicit reimport) are written at INFO, successful and unchanged refresh checks at DEBUG, and every issue (failed refresh check, missing/unreadable project file, failed re-import, any raised catalogue error) at ERROR, according to a log point table authored in docs/implementation/003, with the level chosen per call (log_level on SDK/CLI, startup argument for MCP) per catalogue convention C6; ERROR entries are always written whatever log_level is configured, go to the Python logging framework (logger 'knx_agent') and, when a session exists, to the KNX session log book as level ERROR; the MCP server starts via the new console script knx-agent-mcp with --session-root and --log-level. (User decisions 2026-10-24.)"
+  architecture_options:
+    - id: arch-a
+      label: "Single SessionService in the application layer"
+      description: "One service owns create, describe, reimport and session lookup and calls the refresh guard before every session-scoped operation; session-state.yaml is the single source of truth on disk and is re-read on each call."
+      trade_offs: "Simple ownership; may grow as later slices add session-scoped operations. NOT chosen (decision 2026-10-24: the refresh check must be testable in isolation and applied uniformly, so arch-b)."
+    - id: arch-b
+      label: "SessionLifecycle plus ProjectRefreshGuard as separate collaborators"
+      description: "A lifecycle component handles create/describe/lookup; a refresh guard wraps every public session-scoped operation, checks path/mtime/size, triggers re-import and updates session-state.yaml; a service composes both."
+      trade_offs: "Better isolation and unit-testing of the guard; slightly more indirection. CHOSEN (decision 2026-10-24, internal code structure; no end-user impact)."
+  implementation_options:
+    - id: impl-a
+      label: "PyYAML with Pydantic model for session-state.yaml"
+      description: "Typed Pydantic model serialised to a dict and written with PyYAML (pyyaml is already a dev dependency; it becomes a runtime dependency)."
+      trade_offs: "Light and consistent with the Pydantic contracts; comments in the file are not preserved (not required). CHOSEN (decision 2026-10-24, internal)."
+    - id: impl-b
+      label: "ruamel.yaml for round-trip fidelity"
+      description: "Preserves comments and ordering."
+      trade_offs: "Heavier dependency and a further license record; not needed. NOT chosen."
+    - id: impl-c
+      label: "KNX session log book as append-only JSON Lines file"
+      description: "One JSON object per line in session-log-book.jsonl: cheap appends, partial reads, no rewrite of earlier entries."
+      trade_offs: "Less human-pretty than YAML, but users read it through read_session_log_book (todo 08). CHOSEN (decision 2026-10-24, internal file format)."
+    - id: impl-d
+      label: "KNX session log book as YAML multi-document file"
+      description: "Human-friendly entries separated by document markers."
+      trade_offs: "Appends need careful handling and partial reads are harder. NOT chosen."
+  repository_context:
+    branch: story/03-session-service-and-project-refresh
+    base_commit: f3a4752
+  current_implementation:
+    notes: "Story 02 (implemented, development/backlog/implemented/02-package-skeleton-and-core-api.yaml) delivered src/knx_agent with KnxSessionClient, a placeholder application.describe_session, the typer CLI 'knx-agent session describe', the MCPServer adapter (mcp 2.x), Pydantic C7 envelope models and YAML-fixture-driven tests. Contract sources: docs/implementation/003-proposed-capability-apis.md (conventions C1, C2, C5, C6, C7; capabilities 1 create_session, 2 reimport_system_definition, 3 describe_session) and docs/architecture/001-knx-investigation-platform.md section 2b Session service. Decisions by the user (2026-10-24): session root default ./.knx-agent/sessions, overridden only by --session-root (CLI and MCP startup) and session_root= (SDK), no environment variables."
+    relevant_files:
+      - "docs/architecture/001-knx-investigation-platform.md"
+      - "docs/implementation/002-bootstrap-implementation-plan.md"
+      - "docs/implementation/003-proposed-capability-apis.md"
+      - "src/knx_agent/"
+      - "tests/fixtures/describe_session_cases.yaml"
+    depends_on_stories:
+      - "development/backlog/implemented/02-package-skeleton-and-core-api.yaml"
+  guidelines:
+    - "session_label is the only session identifier on all surfaces; there is no session_id and no implicit active session. 'Active' only refers to the active setup (default) stored as active_setup."
+    - "Canonical terms: KNX session log book (not logbook), work-directory, session-state.yaml, reimport_system_definition (not refresh), scenario state, KnxSessionClient (docs/methodology/02-terminology-dictionary.md)."
+    - "Out of scope: parsing .knxproj into a project graph (todo 04; fingerprint stays null and is deferred there), select_setup, mutations and read_session_log_book (todo 08), trace content (todo 05), scenario state content (todo 06)."
+    - "Never swallow a missing or unreadable .knxproj: raise a typed error carrying the catalogue error code."
+    - "Single-writer assumption: one process works on a session at a time; concurrent access to the same session is out of scope and documented in README.md."
+    - "User decisions 2026-10-24: 'any issue should be logged as ERROR, use the python logging framework' (standard logging module, logger 'knx_agent' and children, no custom logging code beyond configuring a handler in the CLI and MCP entry points; ERROR always written and also appended to the session log book when a session exists); the MCP command is the new console script knx-agent-mcp. ERROR is new to the catalogue level list INFO/DEBUG/FULL: catalogue update in docs/implementation/003, follow-up for read_session_log_book min_level in todo 08."
+    - "The log point table (lifecycle events at INFO, unchanged refresh checks at DEBUG, every failure at ERROR) is a deliverable of this story, authored in docs/implementation/003 (section on log books, convention C6); response envelope is convention C7 and capabilities 1-3 are the entries create_session, reimport_system_definition and describe_session in the same file."
+    - "Terms already in docs/methodology/02-terminology-dictionary.md: KNX session log book, Work-directory, Session state, session_label, KnxSessionClient. 'Session root' (the folder holding all work-directories) is a new term; add it to the dictionary only after confirming the canonical form with the user (Maintenance Rule)."
+    - "Deferred follow-up ids in this repository are development todo paths (the Shipped-Asset Alignment rule accepts a concrete backlog story or todo id); they are converted to story ids when the backlog stories are created."
+    - "Layer rule from story 02 holds: cli/adapters -> sdk -> application -> domain; the refresh guard lives in the application layer so CLI and MCP get it through the SDK."
+    - "Every behaviour is tested with pytest, SDK-first, with data-driven YAML fixtures under tests/fixtures (cases for labels, error codes, mtime/size change); temporary work-directories only (tmp_path), small synthetic .knxproj zip fixtures created by the tests."
+    - "Document the new options (--session-root, session_root=) and the session folder layout in README.md."
+    - "Add the new dependency decisions (pyyaml as runtime dependency) to the later license record (todo 12)."
+  impact_analysis:
+    methodology: "Terminology dictionary: add rows for session root and session-state.yaml refresh check only if the Maintenance Rule applies (confirm with the user first)."
+    architecture: "updated (clarification) - docs/architecture/001 section 2b: replace 'Resolves active-session context' with explicit session_label addressing, and note the session root and the refresh check at the application layer."
+    implementation: "updated - docs/implementation/003 gains the session root rule, the session-state.yaml field list, the log point table (incl. level ERROR and Python logging) and the log book file format; the knx-agent-mcp console script is added in pyproject; docs/implementation/002 Slice 1 gets a realisation note; code in src/knx_agent; README.md."
+    solution_surface: "top_level_runtime: instructed; subagent_topology: instructed_agent_only (no coded sub-agent; Python package built by python-creation-agent)."
+    phase_owners: "story drafting - story-telling-agent; architecture/spec/task plan - architect-planning-agent; Python implementation - python-creation-agent; review - review-validation-agent; validation - qa-agent."
+    invocation_surfaces: "SDK, CLI and MCP all generated for create_session, describe_session and reimport_system_definition; none omitted."
+  shipped_asset_alignment:
+    - asset: "coded-agent doc snapshots (src/agent_building_agent/docs/) of docs/implementation/002 and 003 and docs/architecture/001"
+      decision: not_applicable
+      rationale: "No coded agent lists these documents in its DOC_RELATIVE_PATHS."
+      follow_up_story_id: null
+    - asset: "instructed-agents/agents/* and skill markdown"
+      decision: not_applicable
+      rationale: "None embed or quote the session service sections of the changed docs."
+      follow_up_story_id: null
+    - asset: "knx-agent agent-layer prompts and skills (src/knx_agent/agent_layer)"
+      decision: deferred
+      rationale: "Only an empty placeholder package exists; prompts and skills that use create_session and describe_session are created in todo 11."
+      follow_up_story_id: "development/todos/11-agent-layer.md"
+  development_cycle:
+    steps:
+      - "Verify story branch story/03-session-service-and-project-refresh and confirm the persisted story file in development/backlog/active."
+      - "Architecture update (clarification of section 2b) and implementation-spec update (session root, session-state.yaml fields, log book format, log point table)."
+      - "Solution-surface classification and task plan; consolidated review gate."
+      - "Implement contracts for create_session, reimport_system_definition and the real describe_session responses and the new error codes."
+      - "Implement the session service: session root resolution, session-state.yaml model and I/O, .knxproj guard, refresh guard, session log book writer."
+      - "Expose the operations on KnxSessionClient (session_root=), the typer CLI (session create/describe/reimport with --session-root) and the MCP adapter (startup argument --session-root)."
+      - "pytest with data-driven fixtures: SDK first, then adapter delegation, import-direction, refresh idempotency."
+      - "QA, implementation review gate, final alignment validation."
+    validation:
+      completed_on: "2026-10-24"
+      gates:
+        - "Story review passed (round 3, after revision of rounds 1-2)."
+        - "Consolidated gate (architecture, implementation spec, solution surface, task plan) passed with deferred follow-up (round 2; round 1 blocked only because rationales were left out of the review input)."
+        - "Implementation gate passed with deferred follow-up (round 2; round 1 blocked for the same input reason)."
+        - "Final alignment verified by the calling agent against the surfaces below, because the review agent cannot read files and judged only the supplied excerpts."
+      executable_evidence:
+        - "pytest via MCP pytest_execution: 154 passed (after implementation; rerun before closing)."
+        - "qa-agent task qa-story-03-round-1: pass_fail_result yaml_validation=pass, pytest=pass, five fixture files used."
+        - "validate_yaml: story, task plan and the five fixture YAML files ok."
+        - "Spot checks: no os.environ/getenv in src; no deprecated alias terms in src or README; console scripts knx-agent and knx-agent-mcp registered in pyproject.toml; ERROR exempt from the log level threshold in application/log_book.py."
+      impact_surface_verification:
+        methodology: "updated - docs/methodology/02-terminology-dictionary.md has the Session root row (user-confirmed 2026-10-24)."
+        architecture: "updated (clarification) - docs/architecture/001-knx-investigation-platform.md section 2b and the story_03_clarification entry."
+        implementation: "updated - docs/implementation/003-proposed-capability-apis.md (section 'Session service realisation (story 03)', C6 ERROR level, implementation notes for the documented deviations), docs/implementation/002-bootstrap-implementation-plan.md Slice 1 note, development/todos/08-mutations-and-logbooks.md ERROR-filter note, README.md, pyproject.toml, uv.lock."
+        code_and_tests: "src/knx_agent (domain/session_state, application/session_paths, knxproj_guard, log_book, project_refresh_guard, session_lifecycle, session_service, sdk/logging_setup, contracts, KnxSessionClient, typer CLI, MCPServer adapter); tests/ with five fixture files."
+        installation_assets: "README.md documents session root options, folder layout, knx-agent-mcp, ERROR logging, single-writer assumption; pyyaml is a runtime dependency."
+        shipped_assets: "per shipped_asset_alignment: two not_applicable, one deferred to todo 11."
+      deviations:
+        - "Documented in docs/implementation/003: integer log_book_entry_id; describe_session also takes log_level; create INFO entry written into the temporary folder before the atomic rename; every explicit reimport increments reimport_count; corrupt or missing session-state.yaml is SESSION_NOT_FOUND; non-catalogue exceptions logged at ERROR and re-raised."
+        - "knx-agent-mcp is tested through entry registration and a patched run, not started as a real process."
+        - "Process: the architect edited three docs with an inline python3 script (diffs re-read and accepted); the implementer used one perl in-place edit; uv lock ran in the terminal (no MCP tool for uv)."
+        - "coded-agent-config.yaml has an unrelated model/endpoint change made outside this story; it is not part of this story's scope."
+    review_findings: []
+    deferred_items:
+      - item: "Fingerprint-based refresh check (project_import.fingerprint)"
+        reason: "Marked 'later' in the todo; stays null here."
+        follow_up: "development/todos/04-knxproj-import-and-setup-inspection.md"
+      - item: "Parsing .knxproj content into a project graph"
+        reason: "Todo 04; this story only validates the archive and records file metadata."
+        follow_up: "development/todos/04-knxproj-import-and-setup-inspection.md"
+      - item: "read_session_log_book, select_setup and mutations"
+        reason: "Todo 08. Also: log level ERROR added by this story, so read_session_log_book min_level / --min-level must accept ERROR, INFO, DEBUG, FULL (catalogue update)."
+        follow_up: "development/todos/08-mutations-and-logbooks.md"
+  open_questions: []

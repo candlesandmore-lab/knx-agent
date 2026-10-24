@@ -4,3 +4,4 @@ Goal: named mutations stored as deltas (never full project copies) in the sessio
 Answered: parameters only (no groups/topology/names); multiple parallel named mutations per session; deltas persisted in mutation-specific files in the work dir and documented in session-state.yaml; each mutation has its own log book AND actions also go to the session log book; default = unmutated .knxproj setup when no name is given. Comparison is agent-level, not part of this todo.
 Open: whether environment/state is per mutation (todo 01).
 Depends on: 03, 04
+Follow-up from story 03 (catalogue update): log level ERROR was added (always written, severity above INFO); read_session_log_book min_level / --min-level must accept ERROR, INFO, DEBUG, FULL. See docs/implementation/003-proposed-capability-apis.md.

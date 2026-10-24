@@ -10,4 +10,13 @@ layering, dependency policy, validation expectations) was migrated to the append
 `docs/implementation/003-proposed-capability-apis.md`; delivery slices, milestones, test-asset lists
 and open bootstrap questions were discarded explicitly there because todos 02 to 14 supersede them.
 
+## Slice 1 realisation note (story 03)
+
+Slice 1 (session foundation) is realised by story 03: `SessionLifecycle` and `ProjectRefreshGuard` as
+separate application-layer collaborators composed by a session service, `session-state.yaml` via
+PyYAML (runtime dependency) with atomic writes, and the KNX session log book as JSON Lines. Session
+root, field list, log point table and error order are specified only in
+`docs/implementation/003-proposed-capability-apis.md` (section "Session service realisation (story 03)");
+this note defines nothing. Task plan: `development/backlog/active/03-session-service-and-project-refresh-task-plan.yaml`.
+
 Related: `docs/implementation/001-solution-concept.md`, `docs/architecture/001-knx-investigation-platform.md`.

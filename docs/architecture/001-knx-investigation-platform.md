@@ -7,6 +7,7 @@
   - `docs/architecture/001-knx-investigation-platform.md`
   - `docs/implementation/003-proposed-capability-apis.md`
 - change_type: `update`
+- story_03_clarification: Story 03 (session service) clarifies section 2b without changing boundaries. Decision (2026-10-24): sessions are resolved only by explicit `session_label` (replaces "Resolves active-session context"); all sessions live under a configurable session root; the refresh check is applied in the application layer via a separate `ProjectRefreshGuard` (arch-b, internal structure); the fingerprint is deferred (field present, `null`). Details: `docs/implementation/003-proposed-capability-apis.md`, section "Session service realisation (story 03)".
 - rationale: The repository needs both an initial architecture boundary and a shared vocabulary so later implementation work and agent prompts can refer to the same concepts consistently. Story 01 (capability catalogue) adds a clarification-level update: sessions are addressed by `session_label`, "component" is the only term for KNX components, sessions hold a persistent current system state per setup with an active setup, and log levels govern the log books. No subsystem or boundary changes. `docs/architecture/000-terminology.md` does not exist; terminology lives only in `docs/methodology/02-terminology-dictionary.md`, so no change applies there.
 - downstream_impacts:
   - `docs/implementation/001-solution-concept.md` (reduced to references)
@@ -117,7 +118,9 @@ flowchart LR
 - Persists session metadata in `session-state.yaml`.
 - Requires a `.knxproj` input at session creation time and binds the session to that file's full absolute path.
 - Checks the bound `.knxproj` file on every CLI, SDK, and MCP capability call and triggers re-read when the file has changed.
-- Resolves active-session context for CLI, SDK, and MCP capability execution.
+- Resolves the session from the explicit `session_label` on every CLI, SDK, and MCP capability call; there is no implicit "active session" and no other session identifier. "Active" only ever refers to the active setup.
+- Keeps all work-directories below one session root (default `./.knx-agent/sessions`, set only by the CLI/MCP `--session-root` option or the SDK `session_root=` parameter; no environment variable); the work-directory of a session is `<session root>/<session_label>`.
+- Applies the project refresh check in the application layer (a `ProjectRefreshGuard` composed with a `SessionLifecycle` component), so that CLI and MCP get it through the SDK without duplicating it.
 - Owns lifecycle operations such as create, open, describe, and later archive or delete.
 
 ### 3. KNX system model
@@ -190,7 +193,7 @@ flowchart LR
 - `session-state.yaml` is the canonical persisted session metadata file.
 - A `.knxproj` file is mandatory when starting a session.
 - The session stores the full absolute path of that `.knxproj` file as its bound source project path.
-- Initial required session-state fields include `session_label`, active setup, work-directory path, bound source project absolute path, creation metadata, last imported project fingerprint, active artifact references, log-book references, and mutation references.
+- Initial required session-state fields include `session_label`, active setup, work-directory path, bound source project absolute path, creation metadata, imported project metadata (path, mtime, size, import time and a fingerprint field that stays `null` until the fingerprint-based refresh check of `development/todos/04-knxproj-import-and-setup-inspection.md`), active artifact references, log-book references, and mutation references.
 
 ### Environment model and KNX system state
 

@@ -1,0 +1,14 @@
+# Project change kinds applied to the bound .knxproj after create_session
+# (see apply_change in tests/conftest.py).
+#
+# describe_*:  outcome of describe_session (runs the automatic refresh check).
+# reimport_*:  outcome of reimport_system_definition (forced re-read).
+# expected_*_error: error code, then state file must stay byte-identical.
+
+cases:
+  - {id: unchanged, change: none, describe_status: UNCHANGED, describe_reimport_count: 0, reimport_status: UNCHANGED, reimport_count_after_reimport: 1}
+  - {id: mtime-changed, change: mtime, describe_status: CHANGED, describe_reimport_count: 1, reimport_status: CHANGED, reimport_count_after_reimport: 1}
+  - {id: size-changed, change: size, describe_status: CHANGED, describe_reimport_count: 1, reimport_status: CHANGED, reimport_count_after_reimport: 1}
+  - {id: mtime-and-size-changed, change: both, describe_status: CHANGED, describe_reimport_count: 1, reimport_status: CHANGED, reimport_count_after_reimport: 1}
+  - {id: file-missing, change: missing, describe_error: PROJECT_FILE_UNREADABLE, reimport_error: PROJECT_FILE_UNREADABLE}
+  - {id: file-no-longer-zip, change: not_zip, describe_error: PROJECT_PARSE_ERROR, reimport_error: PROJECT_PARSE_ERROR}

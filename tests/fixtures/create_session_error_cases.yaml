@@ -1,0 +1,17 @@
+# create_session failure cases. Validation order is fixed:
+# SESSION_LABEL_INVALID, PROJECT_FILE_UNREADABLE, PROJECT_PARSE_ERROR, SESSION_LABEL_EXISTS.
+#
+# project: zip | not_zip | empty | directory | missing   (see make_project in tests/conftest.py)
+# label_exists: true pre-creates a session with that label first.
+
+cases:
+  - {id: label-invalid-wins-over-missing-file, label: "bad label!", project: missing, label_exists: false, expected_code: SESSION_LABEL_INVALID}
+  - {id: label-invalid-wins-over-not-zip, label: "bad/label", project: not_zip, label_exists: false, expected_code: SESSION_LABEL_INVALID}
+  - {id: blank-label, label: "", project: zip, label_exists: false, expected_code: SESSION_LABEL_INVALID}
+  - {id: missing-file, label: "s1", project: missing, label_exists: false, expected_code: PROJECT_FILE_UNREADABLE}
+  - {id: directory-instead-of-file, label: "s1", project: directory, label_exists: false, expected_code: PROJECT_FILE_UNREADABLE}
+  - {id: unreadable-wins-over-label-exists, label: "s1", project: missing, label_exists: true, expected_code: PROJECT_FILE_UNREADABLE}
+  - {id: not-a-zip, label: "s1", project: not_zip, label_exists: false, expected_code: PROJECT_PARSE_ERROR}
+  - {id: empty-file, label: "s1", project: empty, label_exists: false, expected_code: PROJECT_PARSE_ERROR}
+  - {id: parse-error-wins-over-label-exists, label: "s1", project: not_zip, label_exists: true, expected_code: PROJECT_PARSE_ERROR}
+  - {id: label-exists, label: "s1", project: zip, label_exists: true, expected_code: SESSION_LABEL_EXISTS}

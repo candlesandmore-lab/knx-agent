@@ -39,8 +39,8 @@ One callable core API is projected identically onto the Python SDK, the `typer` 
 - Every session-scoped capability takes `session_label` (CLI `--session <session_label>`, SDK
   parameter `session_label`, MCP tool argument `session_label`). No other name is used for it.
 - `create_session` takes a `.knxproj` path (no uploaded artifact handle) and a user-chosen `session_label`
-  (required, confirmed). The `session_label` must be unique among all sessions under the session work-directory root
-  (defined in `development/todos/03-session-service-and-project-refresh.md`). The session is bound
+  (required, confirmed). The `session_label` must be unique among all sessions under the session root
+  (rule: section "Session service realisation (story 03)"). The session is bound
   to the absolute path of that file.
 - Project refresh check: every session-scoped call first compares the bound file with the imported
   metadata and re-reads it when changed; `reimport_system_definition` forces the re-read explicitly.
@@ -99,7 +99,9 @@ Which concrete fields belong to MEDIUM is deferred to `development/todos/04-knxp
 
 ### C6. Log levels and log books
 - `log_level`: `INFO` (default; state-changing calls and answers), `DEBUG` (INFO plus substantial
-  results), `FULL` (DEBUG plus low-level flow and debug detail).
+  results), `FULL` (DEBUG plus low-level flow and debug detail). `ERROR` (added by story 03, user decision
+  2026-10-24) marks any issue and is NOT a configurable `log_level` threshold: ERROR entries are always
+  written, whatever `log_level` is configured (see "Session service realisation (story 03)").
 - Chosen per call: CLI `--log-level`, SDK parameter `log_level`; for MCP at server startup argument
   `--log-level` (confirmed). It is not stored as a per-session setting.
 - Every state-changing or answer-producing call writes the session log book, and the mutation log
@@ -123,11 +125,11 @@ CLI/SDK/MCP names were confirmed by the user (still subject to the freeze condit
 
 ### 1. `create_session` (UC 1-5, entry point)
 - Purpose: create an investigation session bound to a `.knxproj` path.
-- Request: `project_path` (required, path only); `session_label` (required, user-chosen, unique among sessions under the session work-directory root; non-empty, letters, digits, `-` and `_` only so it is safe as a directory name).
+- Request: `project_path` (required, path only); `session_label` (required, user-chosen, unique among sessions under the session root; non-empty, letters, digits, `-` and `_` only so it is safe as a directory name).
 - Response: `session_label` (echo), `work_directory`, `session_state_path`, `source_project_absolute_path`, `project_import_summary`, `active_setup` (`default`), envelope.
 - Evidence/limits: `KNXPROJ`; import warnings for unsupported or ambiguous data.
-- Errors: `PROJECT_FILE_UNREADABLE` (missing or unreadable file), `PROJECT_PARSE_ERROR`, `SESSION_LABEL_EXISTS`, `SESSION_LABEL_INVALID`.
-- Projection: CLI `knx-agent session create --project <file> --session-label <session_label>`; SDK `client.create_session(project_path=..., session_label=...)`; MCP `create_session`.
+- Errors: `PROJECT_FILE_UNREADABLE` (missing or unreadable file), `PROJECT_PARSE_ERROR` (not a zip archive), `SESSION_LABEL_EXISTS`, `SESSION_LABEL_INVALID`; validation order is fixed (see story 03 section). Atomic: a failed create leaves no folder.
+- Projection: CLI `knx-agent session create --project <file> --session-label <session_label> [--session-root <dir>] [--log-level <level>]`; SDK `client.create_session(project_path=..., session_label=...)` (client built as `KnxSessionClient(session_root=...)`); MCP `create_session`.
 
 ### 2. `reimport_system_definition` (UC 1, freshness)
 - Purpose: explicitly re-read the bound `.knxproj` of an existing session.
@@ -135,14 +137,14 @@ CLI/SDK/MCP names were confirmed by the user (still subject to the freeze condit
 - Response: `project_refresh_status` (`CHANGED`/`UNCHANGED`), `project_import_summary`, `changes` (components added/removed/changed), `invalidated_references` (state entries or mutation deltas pointing to vanished components), envelope.
 - Evidence/limits: `KNXPROJ`. Retaining or recomputing current system state after a changed project is a **(proposal)**: state is retained, invalidated references are reported as limitation notes.
 - Errors: `PROJECT_FILE_UNREADABLE`, `PROJECT_PARSE_ERROR`.
-- Projection: CLI `knx-agent session reimport --session <session_label>`; SDK `client.reimport_system_definition(session_label=...)`; MCP `reimport_system_definition`.
+- Projection: CLI `knx-agent session reimport --session <session_label> [--session-root <dir>] [--log-level <level>]`; SDK `client.reimport_system_definition(session_label=...)`; MCP `reimport_system_definition`.
 
 ### 3. `describe_session` (UC 1-5, session inspection)
 - Purpose: persisted metadata and status of a session.
 - Request: `session_label`.
 - Response: `session_label`, `work_directory`, `source_project_absolute_path`, `project_refresh`, `active_setup`, `setups` (default plus mutations, each with current system state summary), `trace_artifacts`, `log_book_references`, envelope.
-- Errors: common only.
-- Projection: CLI `knx-agent session describe --session <session_label>`; SDK `client.describe_session(session_label=...)`; MCP `describe_session`.
+- Errors: common only (`SESSION_NOT_FOUND`; `PROJECT_FILE_UNREADABLE` and `PROJECT_PARSE_ERROR` from the automatic refresh check). Read-only: writes no log book entry (no `log_book_entry_id`).
+- Projection: CLI `knx-agent session describe --session <session_label> [--session-root <dir>]`; SDK `client.describe_session(session_label=...)`; MCP `describe_session`.
 
 ### 4. `select_setup` (UC 5)
 - Purpose: switch the active setup.
@@ -154,11 +156,11 @@ CLI/SDK/MCP names were confirmed by the user (still subject to the freeze condit
 
 ### 5. `read_session_log_book` (UC 3, 4)
 - Purpose: read the session history for reasoning and audit; replaces separate recent-activity and mutation log reads.
-- Request: `session_label`, `mutation_name?` (when given reads that mutation log book, otherwise the overall session log book), `min_level?` (filter by log level), `limit?`, `since_entry_id?`.
+- Request: `session_label`, `mutation_name?` (when given reads that mutation log book, otherwise the overall session log book), `min_level?` (filter by log level; values `ERROR`, `INFO`, `DEBUG`, `FULL`, severity order ERROR highest; catalogue update by story 03, ERROR is new), `limit?`, `since_entry_id?`.
 - Response: `entries`, `truncated`, envelope. Reading does not itself write the log book.
 - Evidence/limits: entries below the level configured when they were written are absent; note this in `limitation_notes`.
 - Errors: `MUTATION_NOT_FOUND`.
-- Projection: CLI `knx-agent session log-book --session <session_label> [--mutation <name>] [--min-level INFO|DEBUG|FULL] [--limit <n>] [--since-entry-id <id>]`; SDK `client.read_session_log_book(...)`; MCP `read_session_log_book`.
+- Projection: CLI `knx-agent session log-book --session <session_label> [--mutation <name>] [--min-level ERROR|INFO|DEBUG|FULL] [--limit <n>] [--since-entry-id <id>]`; SDK `client.read_session_log_book(...)`; MCP `read_session_log_book`.
 
 ### 6. `list_components` (UC 1.1, 1.2)
 - Purpose: query components by (partial) selector, or list all.
@@ -271,6 +273,107 @@ CLI/SDK/MCP names were confirmed by the user (still subject to the freeze condit
 - Errors: `SELECTOR_UNRESOLVED`, `ENRICHMENT_SOURCE_UNAVAILABLE`, `INVALID_REQUEST`.
 - Projection: CLI `knx-agent knowledge fetch-component-details --session <session_label> [--component <selector>] [--manufacturer <name>] [--product-code <code>]`; SDK `client.fetch_component_details(...)`; MCP `fetch_component_details`.
 
+## Session service realisation (story 03)
+
+Realises capabilities 1-3 and the C1/C6 rules on disk. Decisions of 2026-10-24; error codes remain
+proposals until the catalogue freeze.
+
+### Session root and work-directory
+- The session root is the folder holding all work-directories. Default `./.knx-agent/sessions`
+  (relative to the current working directory, created on demand).
+- It is set ONLY by CLI option `--session-root <dir>` (on every `session` subcommand), the MCP server
+  startup argument `--session-root <dir>`, and the SDK parameter `session_root=` on `KnxSessionClient`.
+  No environment variable is read. The MCP server is started with the new console script `knx-agent-mcp`
+  (user decision 2026-10-24), e.g. `knx-agent-mcp --session-root <dir> --log-level DEBUG`.
+- Work-directory of a session: `<session root>/<session_label>`, containing `session-state.yaml` and
+  `session-log-book.jsonl`. `describe_session` and `create_session` return it as an absolute path.
+- `session_label`: non-empty, letters, digits, `-` and `_` only. On session-scoped calls other than
+  `create_session`, a blank or non-string label is `INVALID_REQUEST` (story 02 behaviour kept), a label
+  with other characters can never exist and yields `SESSION_NOT_FOUND`; a missing folder is `SESSION_NOT_FOUND`.
+- There is no `session_id` and no implicit active session; "active" refers to the active setup only.
+
+### Error order of create_session
+1. `SESSION_LABEL_INVALID`  2. `PROJECT_FILE_UNREADABLE`  3. `PROJECT_PARSE_ERROR`  4. `SESSION_LABEL_EXISTS`.
+For existing sessions: label check, `SESSION_NOT_FOUND`, then the refresh check (`PROJECT_FILE_UNREADABLE`, `PROJECT_PARSE_ERROR`).
+The `.knxproj` guard only verifies that the file is readable and a valid zip archive; content is not
+parsed (todo 04).
+
+### Atomicity
+- `create_session` builds the work-directory in a temporary sibling folder (`<session root>/.<session_label>.creating-<token>`;
+  labels cannot start with `.`), then renames it into place; any failure removes the temporary folder, so a
+  failed create never blocks the label. A rename that loses a race maps to `SESSION_LABEL_EXISTS`.
+- `session-state.yaml` is always written to a temporary file in the same folder and then renamed over the
+  old file; a failed re-import leaves the previous state intact. Single-writer assumption: one process
+  per session at a time (documented in README.md).
+
+### session-state.yaml field list
+`session_label`; `created_at` (UTC ISO 8601); `work_directory` (absolute); `source_project_absolute_path`;
+`project_import`: `path`, `mtime` (integer nanoseconds), `size` (bytes), `imported_at`,
+`project_import_summary` (file name, archive entry count, `limitation_note`: ".knxproj content import is
+not implemented yet"), `fingerprint` (always `null` until todo 04); `project_refresh`: `last_status`
+(`CHANGED`/`UNCHANGED`), `last_reimported_at`, `reimport_count` (incremented by every re-import, automatic or
+explicit `reimport_system_definition` even when the result is `UNCHANGED`; never by an unchanged automatic
+check, so that check is idempotent); `active_setup` (`default`); `trace_artifacts: []`;
+`scenario_state: []`; `mutations: []`; `log_book_references` (list, here `session-log-book.jsonl`);
+`mutation_log_book_references` (empty mapping).
+
+### Project refresh check
+Run by the application layer before every public session-scoped operation (CLI and MCP get it through
+the SDK). It compares existence, `mtime` and `size` with `project_import`. Equal: no write, operation
+proceeds. Different: automatic re-import (validate archive, update `project_import` and `project_refresh`
+atomically), then the operation proceeds. Missing or unreadable: `PROJECT_FILE_UNREADABLE`, state unchanged.
+`reimport_system_definition` forces the re-read and reports `CHANGED` (metadata differed) or `UNCHANGED`;
+it always rewrites `project_import.imported_at`. `changes` and `invalidated_references` are empty until
+todo 04. Known limitation: a content change that keeps `mtime` and `size` is not detected by the automatic
+check (manual `reimport_system_definition`; fingerprint in todo 04).
+
+### KNX session log book format
+Append-only JSON Lines file `session-log-book.jsonl` in the work-directory, one JSON object per line with
+`entry_id` (integer, starts at 1, increments by 1), `timestamp` (UTC ISO 8601), `level` (`ERROR`/`INFO`/`DEBUG`/`FULL`),
+`capability`, `setup`, `summary`, `details` (object). `ERROR` entries are always written, whatever
+`log_level` is configured. Other entries are written only if their level is at or below the call's
+`log_level` (INFO < DEBUG < FULL; `log_level` itself accepts only INFO, DEBUG, FULL). Severity order for
+filtering is ERROR (highest), INFO, DEBUG, FULL. The file is created at session creation. Reading is
+`read_session_log_book` (todo 08).
+
+Catalogue update: adding `ERROR` changes the level list INFO/DEBUG/FULL used by C6 and by the
+`read_session_log_book` `min_level`/`--min-level` filter; todo 08 must implement the four-value filter
+(follow-up `development/todos/08-mutations-and-logbooks.md`).
+
+### Error logging (user decision 2026-10-24: "any issue should be logged as ERROR, use the python logging framework")
+- Any issue is an ERROR: failed refresh check, missing or unreadable project file, failed re-import, and
+  every raised catalogue error (`KnxAgentError`).
+- Each ERROR goes to the Python standard `logging` module (logger `knx_agent` and child loggers such as
+  `knx_agent.application`; no custom logging code beyond configuring a handler in the CLI and MCP entry
+  points) AND, when a session exists (work-directory present), to the KNX session log book as level ERROR.
+  Errors before a session exists (for example a failed `create_session`, `SESSION_NOT_FOUND`) are logged to
+  the Python logger only.
+- ERROR is written regardless of `log_level`.
+
+### Log point table (story 03)
+| Log point | Capability | Level | Summary / details |
+| --- | --- | --- | --- |
+| Session created | `create_session` | INFO | label, project path, work-directory |
+| Explicit re-import done | `reimport_system_definition` | INFO | status CHANGED/UNCHANGED, old and new mtime/size |
+| Refresh check, unchanged | any session-scoped call | DEBUG | compared mtime/size |
+| Refresh check, changed, automatic re-import done | any session-scoped call | INFO | old and new mtime/size |
+| Any failure (refresh check failed, file missing/unreadable/not a zip, failed re-import, any raised catalogue error) | the calling capability | ERROR | error code, message (state unchanged); always written |
+| `describe_session` success | `describe_session` | none | read-only, no entry |
+
+With the default `INFO` the log book holds lifecycle events and all errors; unchanged refresh checks appear
+only at `DEBUG`. `capability` of a refresh-check entry is the calling capability. A failed `create_session`
+writes no log book entry (no folder survives) but still logs the ERROR to the Python logger. Entries describing an operation are written after the state write; the
+response envelope carries `log_book_entry_id` (integer) of the entry written for that call, if any; for `describe_session` it is set
+only when its refresh check wrote an entry. Implementation notes (story 03): `create_session` writes its INFO
+entry into the temporary folder just before the atomic rename (it stays the first entry and keeps create fully
+atomic); `describe_session` also accepts `--log-level` / `log_level` (default `INFO`) so the DEBUG entry of an
+unchanged refresh check can be recorded; an explicit `reimport_system_definition` runs the forced re-read
+instead of the automatic check (no second refresh entry); a session folder with a missing or corrupt
+`session-state.yaml` is `SESSION_NOT_FOUND` with the reason in `details`; any non-catalogue exception is also
+logged at ERROR and re-raised unchanged; the CLI prints the Python-logging ERROR line to stderr followed by the
+`ErrorInfo` JSON as the last line; `describe_session` returns `setups` as `[{name: default,
+current_system_state_summary: unknown}]` until todo 06.
+
 ## Traceability: use case to capability
 
 Use case numbers follow `docs/methodology/001-use-cases-raw.md`; sub-rows are its success criteria.
@@ -332,7 +435,7 @@ Every one of the 19 capabilities appears in at least one row.
 Content of `docs/implementation/001-solution-concept.md` and `002-bootstrap-implementation-plan.md` that
 is still valid and not captured by the architecture or the dictionary:
 
-- Session persistence: one work-directory per session; `session-state.yaml` created at session
+- Session persistence: one work-directory per session (`<session root>/<session_label>`, see "Session service realisation (story 03)"); `session-state.yaml` created at session
   creation with at least `session_label`, `created_at`, `work_directory`, `source_project_absolute_path`,
   `project_import`, `project_refresh`, `active_setup`, `trace_artifacts`, `mutations`, per-setup
   `current_system_state` reference and log-book references; artifacts are referenced from the state
