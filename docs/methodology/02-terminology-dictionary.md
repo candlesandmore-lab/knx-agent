@@ -31,25 +31,25 @@ consultation instructions before making a terminology or naming decision.
 | Capability | Capability | A user-meaningful operation provided by the shared Python core and projected consistently across tool surfaces. |
 | Shared Python core | Shared Python core | The canonical implementation layer that owns domain behavior, request handling, result models, and business rules for all surfaces. |
 | Contract | Contract | The structured request and response model for a capability, independent of whether it is invoked by CLI, SDK, or MCP. |
-| Project graph | Project graph | The normalized in-memory representation of a `.knxproj` installation, including topology, devices, group addresses, communication objects, parameters, and provenance. |
-| KNX system setup | KNX system setup | The imported default configuration derived from the bound `.knxproj` file, including devices, parameters, topology, group addresses, and communication objects. |
-| Device typing | Device typing | The classification of devices and device roles derived from `.knxproj` contents and optionally refined by enrichment logic. |
+| Project graph | Project graph | The normalized in-memory representation of a `.knxproj` installation, including topology, components, group addresses, communication objects, parameters, and provenance. |
+| KNX system setup | KNX system setup | The imported default configuration derived from the bound `.knxproj` file, including components, parameters, topology, group addresses, and communication objects. |
+| Component typing | Component typing | The classification of components and component roles derived from `.knxproj` contents and optionally refined by enrichment logic. |
 | Trace observation | Trace observation | A timestamped decoded fact extracted from a KNX bus monitor trace, linked to packet evidence and address interpretation. |
 | Observed fact | Observed fact | A fact derived from recorded or live KNX telegram activity rather than directly from the ETS project. |
 | Source fact | Source fact | A fact imported directly from the `.knxproj` without interpretation beyond parsing and normalization. |
 | Derived fact | Derived fact | A fact computed from source facts or observed facts, such as reverse indexes, inferred participant lists, or event propagation paths. |
 | Enriched fact | Enriched fact | A fact added from external component knowledge, vendor documentation, curated rules, or later adapter logic, with explicit provenance. |
-| Scenario state | Scenario state | The session-scoped state used for simulation, containing verbal assumptions, injected events, and accepted trace-derived context while remaining separate from source facts. |
+| Scenario state | Scenario state | The session-scoped ordered inputs (environment values, user actions, trace loads) of a setup that produce its current system state, kept separate from source facts. It is not resettable; restart by creating a new session. |
 | Environment model | Environment model | The session-scoped model of primary environmental inputs, such as sensor-oriented lux or temperature values, that can drive KNX component behavior. |
 | KNX system state | KNX system state | The simulated or observed current state of the KNX installation after processing ordered inputs, trace observations, and resulting component communication. |
 | Environment condition | Environment condition | A normalized representation of contextual state relevant to KNX behavior, such as room temperature, sun exposure, wind alarm, occupancy, or time-of-day. |
 | Injected event | Injected event | A user-supplied or tool-generated stimulus introduced into the simulation, such as a button press, sensor update, or scheduled trigger. |
-| Expected reaction | Expected reaction | The predicted downstream behavior of devices, group objects, or environment-dependent logic for a given project graph and scenario state. |
+| Expected reaction | Expected reaction | The predicted downstream behavior of components, group objects, or environment-dependent logic for a given project graph and scenario state. |
 | Evidence source | Evidence source | The origin of a conclusion or result element, such as `.knxproj` structure, trace evidence, vendor documentation, or simulation rules. |
 | Provenance | Provenance | The metadata that explains where a fact came from, how it was inferred, and which artifacts or packets support it. |
 | Confidence | Confidence | An explicit measure of how strongly the system stands behind an inferred or enriched statement, especially for trace-derived environment conditions. |
 | Investigation session | Investigation session | The bounded working context for analyzing one project, optional trace inputs, scenario state, and generated hypotheses. |
-| Session identifier | Session identifier | The unique stable identifier used to address an investigation session across CLI, SDK, and MCP tool surfaces. |
+| session_label | `session_label` | The identifier chosen by the user at `create_session` (required, unique within the workspace) and used to address an investigation session on every CLI, SDK, and MCP tool surface. Replaces `session identifier`, `session_id`, `session_handle`, `session_token`, and `label`. |
 | Work-directory | Work-directory | The session-unique filesystem directory that stores persistent artifacts for an investigation session, including `session-state.yaml` and future session-scoped files. |
 | Session state | Session state | The persisted metadata for an investigation session, stored in `session-state.yaml`, including the source `.knxproj` input and other session-scoped facts, references, and settings. |
 | KNX session log book | KNX session log book | The ordered session history of significant actions, inputs, assumptions, answers, refresh events, and mutations that the outer agent layer can use for reasoning and explanation. |
@@ -57,7 +57,7 @@ consultation instructions before making a terminology or naming decision.
 | Project refresh check | Project refresh check | The per-call detection step that compares the bound `.knxproj` file on disk with the session's imported project metadata and triggers re-reading when the file has changed. |
 | Diagnostic hypothesis | Diagnostic hypothesis | A falsifiable explanation for observed misbehavior that the agent can test by querying configuration, trace evidence, or simulation outcomes. |
 | Deterministic run | Deterministic run | A repeatable execution of a capability through CLI, SDK, or MCP that produces the same structured result for the same inputs and configuration. |
-| Session-scoped capability | Session-scoped capability | A capability that requires a session identifier or active session context to resolve which project graph, trace observations, and scenario state should be used. |
+| Session-scoped capability | Session-scoped capability | A capability that requires a `session_label` to resolve which project graph, trace observations, and scenario state should be used. |
 | Mutation | Mutation | A named parameter-only overlay on top of the default KNX system setup within a session. |
 | Mutation delta | Mutation delta | The persisted set of changed parameter values that differentiates a mutation from the default KNX system setup. |
 | Agent layer | Agent layer | The instructed agent or skill package that turns natural-language user requests into explicit capability calls against the SDK, CLI, or MCP tool surfaces. |
@@ -65,7 +65,61 @@ consultation instructions before making a terminology or naming decision.
 | Surface drift | Surface drift | An unwanted difference in behavior, naming, payload shape, or semantics between tool surfaces for the same capability. |
 | License decision | License decision | The recorded assessment that a Python dependency's license is acceptable or unacceptable for use in this solution. |
 | Free-to-use license | Free-to-use license | A software license that permits the intended development, local use, internal use, and redistribution model of this project without paid-use restrictions. |
+| mutation_name | `mutation_name` | The parameter naming a mutation: the user-defined name given at creation. On capability calls it optionally overrides the target setup for that call only; it never changes the active setup. |
+| Mutation log book | Mutation log book | The per-mutation history of actions on that mutation; those actions are also written to the KNX session log book, subject to log level. |
+| Default setup | Default setup | The unmutated KNX system setup imported from the `.knxproj`; its setup name is `default`. |
+| Active setup | Active setup | The setup (default setup or a mutation) that capability calls act on unless `mutation_name` overrides it for one call; changed only by `select_setup`. |
+| Current system state | Current system state ("now") | The persistent KNX system state of a setup after all ordered prior inputs, persisted after every operation; `unknown` is a valid value. |
+| Component | Component | The canonical term for a KNX device-like entity in the KNX system setup, in capability names, parameters, and docs. Replaces `device`, `object`, and `element`. |
+| Selector | Selector | How a component or group address is identified in a request: display name (partial match), instance path (partial match), individual address (exact), ETS id (exact). An ambiguous query returns a set. |
+| Detail level | Detail level | `SUMMARY`, `MEDIUM` (default), or `FULL`; controls how much a descriptive capability returns. |
+| Log level | Log level | `INFO` (default), `DEBUG`, or `FULL`; governs what is written to the log books; chosen per CLI/SDK call or at MCP server startup, not stored per session. |
+| Capability catalogue | Capability catalogue | `docs/implementation/003-proposed-capability-apis.md`, the single authoritative list of capabilities. Status `reviewed draft` until the story in `development/todos/13-fixtures-and-end-to-end-validation.md` passes; changes after that need a catalogue update plus a review cycle. |
+| create_session | `create_session` | Capability: creates an investigation session from a `.knxproj` path and a user-chosen unique `session_label` (no uploaded artifact handle). |
+| reimport_system_definition | `reimport_system_definition` | Capability: re-reads the bound `.knxproj` for an existing session. Replaces `refresh`, `refresh_session`, `load_project`. |
+| select_setup | `select_setup` | Capability: switches the active setup to the default (no name) or an existing mutation and reports its current system state summary. |
+| describe_session | `describe_session` | Capability: persisted metadata and status of a session, including setups and their state summaries. |
+| list_components | `list_components` | Capability: queries or lists components by selector at a detail level. |
+| describe_component | `describe_component` | Capability: configuration and topology of selected components. Replaces `describe_device`. |
+| summarize_topology | `summarize_topology` | Capability: summarizes areas, lines, rooms if derivable, and component distribution. |
+| trace_group_flow | `trace_group_flow` | Capability: participants and propagation path of a group address or communication object. Also covers group address lookup. |
+| list_environment_inputs | `list_environment_inputs` | Capability: lists environment inputs with current values. Also covers reading a value. |
+| set_environment_value | `set_environment_value` | Capability: sets an environment-model value for a sensor and updates the current system state. |
+| load_bus_trace | `load_bus_trace` | Capability: loads a bus trace, updates environment and system state, and returns inferred values with evidence. Absorbs `infer_environment_from_trace` and `decode_telegram`. |
+| resolve_user_action_candidates | `resolve_user_action_candidates` | Capability: resolves a component and control into candidate KNX-level actions. |
+| inject_user_action | `inject_user_action` | Capability: applies a resolved user action and updates the current system state. |
+| answer_activity_question | `answer_activity_question` | The single capability answering should, why, why not, what changed, and what input caused this questions about now. Replaces `explain_expected_reaction`, `list_possible_causes`, `compare_expected_vs_observed`, and `simulate_outcome`. |
+| read_session_log_book | `read_session_log_book` | Capability: reads the session log book, or a mutation log book when `mutation_name` is given. Replaces `summarize_recent_activity` and `read_mutation_log_book`. |
+| create_mutation | `create_mutation` | Capability: creates a named parameter-only mutation seeded from a copy of the default setup's current environment model and input history; mutations of mutations are not supported. |
+| set_parameter_override | `set_parameter_override` | Capability: sets a component parameter in a mutation. |
+| list_mutations | `list_mutations` | Capability: lists mutations with details. Replaces `describe_mutation`. |
+| fetch_component_details | `fetch_component_details` | Capability: fetches vendor or catalogue information including behavior hints. Replaces `extract_behavior_hints`. |
+| Reviewed draft | Reviewed draft | Document status of a catalogue or specification that passed review but is not yet frozen; it becomes frozen only when its stated freeze condition is met (for the capability catalogue: todo 13 end-to-end validation passes). Changes after freezing need a catalogue update plus a review cycle. |
 | Limitation note | Limitation note | An explicit statement in a result or document that describes unsupported behavior, ambiguity, missing evidence, or partial coverage. |
+
+### Replaced aliases
+
+Do not use the replaced term; use the replacement. These terms may appear only in this table, in the
+replaced-names table of the capability catalogue, and in historical todos and stories.
+
+| Replaced term | Replacement | Notes |
+| --- | --- | --- |
+| device, object, element, `describe_device`, device typing | component, `describe_component`, component typing | |
+| `session identifier`, `session_id`, `session_handle`, `session_token`, `label` | `session_label` | |
+| `refresh`, `refresh_session`, `load_project`, `project load` | `reimport_system_definition` | |
+| `explain_expected_reaction`, `list_possible_causes`, `simulate_outcome` | `answer_activity_question` | |
+| `compare_expected_vs_observed`, original-versus-mutated comparison | agent layer (no core capability) | |
+| `summarize_recent_activity`, `read_mutation_log_book` | `read_session_log_book` | |
+| `infer_environment_from_trace`, `decode_telegram` | `load_bus_trace` | merged |
+| `inject_event`, `set_environment_state` | `inject_user_action`, `set_environment_value` | |
+| `find_group_address` | `trace_group_flow` | |
+| `get_environment_value` | `list_environment_inputs` | |
+| `describe_mutation` | `list_mutations` | |
+| `extract_behavior_hints` | `fetch_component_details` | |
+| `show_evidence_sources` | none | dropped; evidence is embedded in every response |
+| `reset_state`, `reset_scenario` | none | dropped; create a new session |
+| uploaded artifact handle (for `create_session`) | none | dropped; path only |
+| `purpose` request parameter | none | dropped from core; the agent layer resolves purposes via query capabilities |
 
 ### Term preferences
 

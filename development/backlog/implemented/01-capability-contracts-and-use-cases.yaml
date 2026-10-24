@@ -1,0 +1,124 @@
+schema_version: 1
+story:
+  id: 1
+  title: "Establish single authoritative capability catalogue and trim dependent docs"
+  state: implemented
+  created_on: "2026-10-24"
+  last_updated_on: "2026-10-24"
+  source_todo:
+    - "development/todos/01-capability-contracts-and-use-cases.md"
+  actor: "developer / capability API designer"
+  goal: "Replace three overlapping capability definitions with one reviewed-draft catalogue in docs/implementation/003, with docs/implementation/001 and 002 reduced to cross-references, a full per-capability specification (name, purpose, request, response, errors, CLI/SDK/MCP projection, use-case traceability), a traceability table mapping each answered use case to the capability that satisfies it, and a refined terminology dictionary; the catalogue is frozen only after story development/todos/13-fixtures-and-end-to-end-validation.md (fixtures and end-to-end validation) passes. The canonical capability list is: create_session, reimport_system_definition, list_environment_inputs, trace_group_flow, load_bus_trace, read_session_log_book, inject_user_action, set_environment_value, answer_activity_question, list_mutations, fetch_component_details, describe_component, select_setup, describe_session, list_components, summarize_topology, resolve_user_action_candidates, create_mutation, set_parameter_override."
+  success_criteria:
+    - "docs/implementation/003 is the single capability catalogue: every capability from the resolved list (create_session, reimport_system_definition, list_environment_inputs, trace_group_flow, load_bus_trace, read_session_log_book, inject_user_action, set_environment_value, answer_activity_question, list_mutations, fetch_component_details, describe_component, select_setup, describe_session, list_components, summarize_topology, resolve_user_action_candidates, create_mutation, set_parameter_override) has a complete entry with name, purpose, request schema, response schema with evidence sources and limitation notes, error cases, CLI/SDK/MCP projection using session_label, and the answered use case it traces to; the second duplicate content block inside 003 is removed."
+    - "docs/implementation/001 (capability families) and docs/implementation/002 (tool mappings) contain no standalone capability definitions; each is reduced to a brief preamble and a forward reference to docs/implementation/003, with any content not present in 003 either migrated there or explicitly discarded."
+    - "docs/implementation/003 contains a traceability table with one row per answered use case from docs/methodology/001-use-cases-raw.md, each row naming the capability or capabilities that satisfy it."
+    - "docs/methodology/02-terminology-dictionary.md is updated to add canonical-term rows for every new or renamed capability (including session_label, mutation_name, component, answer_activity_question and its replaced aliases, read_session_log_book and its replaced aliases, inject_user_action, set_environment_value, reimport_system_definition and its replaced aliases, select_setup, current/now system state, describe_session, list_components, summarize_topology, infer_environment_from_trace (recorded as a replaced alias merged into load_bus_trace), resolve_user_action_candidates, create_mutation, set_parameter_override, 'reviewed draft' (as a document-status term), and any other alias terms resolved in the todo decisions), and the Maintenance Rule is satisfied for each added row."
+    - "docs/implementation/003 is marked 'reviewed draft' at story completion; a comment or header note states it becomes frozen only after development/todos/13-fixtures-and-end-to-end-validation.md (fixtures and end-to-end validation) passes, and that all subsequent changes require a catalogue update plus review cycle."
+  architecture_options:
+    - id: A1
+      label: "In-place rewrite of 003 with 001/002 trimmed"
+      description: "Edit docs/implementation/003 directly to become the canonical catalogue, removing its duplicated content block, migrate any unique content from 001 and 002 into 003, then overwrite 001 and 002 with minimal preambles and references. Single PR. Architecture decision: change_type update (clarification level) in docs/architecture/001-knx-investigation-platform.md. docs/architecture/000-terminology.md is not required; terminology lives in docs/methodology/02-terminology-dictionary.md (single source). Decided: not applicable."
+      trade_offs: "Simplest; no new files; matches the todo's stated deliverable. Risk: large diff in one file may be harder to review. Selected at planning (2026-10-24): A1, because the todo names 003 as target and A2 would diverge from that decision."
+    - id: A2
+      label: "New canonical file, 001/002/003 all become references"
+      description: "Create docs/implementation/003-capability-catalogue.md as the canonical file and redirect all three existing files."
+      trade_offs: "Cleaner separation but introduces a naming convention divergence; the todo explicitly names 003 as the target, so this conflicts with a stated decision."
+    - id: A3
+      label: "show_evidence_sources capability - dropped"
+      description: "show_evidence_sources was considered as a standalone capability to surface evidence to callers. Decision: dropped."
+      trade_offs: "Alternative considered: keep show_evidence_sources as a separate capability. Rationale for drop: every response already carries evidence_sources, so a separate capability adds surface without value."
+  implementation_options:
+    - id: I1
+      label: "Sequential per-capability authoring"
+      description: "Author each capability entry one at a time in the order they appear in the resolved list, ensuring request/response/error/projection fields are filled before moving to the next."
+      trade_offs: "Reviewable incrementally; lower chance of cross-capability inconsistency. Selected at planning (2026-10-24): I1 order, with shared conventions and a common response envelope defined once in the 003 preamble to prevent schema drift."
+    - id: I2
+      label: "Batch-authored capability entries"
+      description: "Draft all entries in a single pass, then review for consistency."
+      trade_offs: "Faster first draft; higher risk of schema drift between entries."
+  repository_context:
+    branch: story/01-capability-catalogue
+    base_commit: d99b26fe47fadfa6ab8bcc301a55377fdee51b7e
+  current_implementation:
+    capability_definition_sources:
+      - "docs/methodology/001-use-cases-raw.md"
+      - "docs/implementation/001 (capability families)"
+      - "docs/implementation/002 (tool mappings)"
+      - "docs/implementation/003 (proposed APIs, contains duplicate content block)"
+    terminology_source: "docs/methodology/02-terminology-dictionary.md"
+    state: "Three overlapping, inconsistently named capability definitions exist; 003 contains a duplicated second copy of its own content; no single authoritative catalogue exists; terminology dictionary does not yet contain entries for the new capability names."
+  guidelines:
+    - "Use 'component' everywhere (not 'device', 'object', or 'element') as the canonical term for the describe_component family."
+    - "session_label is the canonical term for the CLI/SDK/MCP session identifier on all projections; do not use session_id, session_handle, or session_token as synonyms."
+    - "mutation_name is the canonical parameter name for per-mutation scoping; calls act on the active setup by default and an optional per-call mutation_name overrides the target for that call only without changing the active setup."
+    - "answer_activity_question is the single canonical capability replacing explain_expected_reaction, list_possible_causes, compare_expected_vs_observed, and simulate_outcome; do not reintroduce those aliases anywhere in the catalogue or dictionary."
+    - "read_session_log_book with optional mutation_name parameter replaces both summarize_recent_activity and read_mutation_log_book; do not use the replaced names."
+    - "show_evidence_sources is dropped; evidence must be embedded in every answer response, not surfaced as a separate capability."
+    - "Purpose-based entity resolution is agent/skill-layer concern only; no purpose-matching capability belongs in the core API catalogue."
+    - "compare_expected_vs_observed and original-vs-mutated comparisons are agent-level only; do not include them as catalogue entries."
+    - "create_session accepts a path only (no uploaded artifact handle)."
+    - "reimport_system_definition is the canonical capability name replacing 'refresh' and 'load_project' for re-reading the .knxproj for an existing session; do not use 'refresh' or 'refresh_session' as capability names."
+    - "reset_state is dropped; to restart, the user creates a new session. A KNX session maintains a persistent 'current/now system state' per setup, persisted at the end of every operation so CLI commands can run stateful sequences. select_setup(mutation_name?) switches the active setup to the default (no name) or any existing mutation and reports the now-active setup and its current system state summary."
+    - "Selector syntax (display name with partial-name matching, instance path with partial-name matching, individual address exact, ETS id exact) and ambiguous-query semantics (returns a set) apply uniformly; record these as catalogue-wide conventions in 003's preamble."
+    - "Detail levels SUMMARY / MEDIUM (default) / FULL apply across all descriptive calls; record as catalogue-wide convention."
+    - "Log levels INFO (state-changing calls and answers), DEBUG (INFO plus substantial results), and FULL (DEBUG plus low-level flow and debug detail) govern what is written to the session log book; the level is chosen per CLI/SDK call or via MCP server startup argument, not stored as a per-session setting; default level is INFO (confirmed decision); read_session_log_book can filter by level; mutation-targeted calls additionally write the mutation log book."
+    - "The 'freeze' note in the catalogue header must reference development/todos/13-fixtures-and-end-to-end-validation.md by id; do not claim the catalogue is frozen until that story passes."
+    - "Prefer updating existing solution-definition documents over creating parallel alternatives (story-telling agent rule)."
+    - "Use repository-relative paths inside all story content."
+    - "docs/architecture/000-terminology.md is not required; terminology lives in docs/methodology/02-terminology-dictionary.md (single source). Decided: not applicable."
+    - "infer_environment_from_trace is merged into load_bus_trace: loading a trace updates the current system state/environment directly and returns what it inferred with evidence; infer_environment_from_trace must not appear as a separate catalogue entry and must be recorded as a replaced alias in the terminology dictionary."
+    - "The six capabilities from docs/implementation/003 that survive consolidation (describe_session, list_components, summarize_topology, resolve_user_action_candidates, create_mutation, set_parameter_override) must be included in the canonical capability list with complete entries in 003; confirm during development step 2 that none conflicts with an existing entry or a resolved decision."
+  impact_analysis:
+    methodology: "docs/methodology/02-terminology-dictionary.md is updated with new canonical-term rows for all renamed and new capability names. docs/methodology/001-use-cases-raw.md is referenced but not structurally changed."
+    architecture: "docs/implementation/001 and docs/implementation/002 are structurally changed (reduced to references). docs/implementation/003 is rewritten as the canonical catalogue. docs/implementation/001-003 are implementation-specification changes. docs/architecture/001-knx-investigation-platform.md is a clarification-level architecture update."
+    implementation: "No code files change in this story. The catalogue is a design doc artifact. Updated docs will ground future instructed-agent and skill files in later todos. Solution surface classification: top_level_runtime: instructed; subagent_topology: instructed_agent_only (rationale: documentation-only story, no coded sub-agent needed). Phase owners: story drafting - story-telling-agent; planning - architect-planning-agent; implementation (doc authoring, performed in the planning phase) - architect-planning-agent; review - review-validation-agent; qa - qa-agent."
+  shipped_asset_alignment:
+    - asset: "docs/implementation/001-solution-concept.md (capability families) — coded-agent doc snapshot (src/agent_building_agent/docs/) and any instructed-agent/skill markdown under instructed-agents/ grounded in this doc"
+      decision: deferred
+      rationale: "No coded agents or instructed-agent/skill files are grounded in docs/implementation/001-solution-concept.md yet. Alignment of any future consumers against the trimmed reference-only version will be confirmed when those assets are created or updated in subsequent todos (earliest: development/todos/13-fixtures-and-end-to-end-validation.md)."
+      follow_up_story_id: development/todos/13-fixtures-and-end-to-end-validation.md
+    - asset: "docs/implementation/002-bootstrap-implementation-plan.md (tool mappings) — coded-agent doc snapshot (src/agent_building_agent/docs/) and any instructed-agent/skill markdown under instructed-agents/ grounded in this doc"
+      decision: deferred
+      rationale: "No coded agents or instructed-agent/skill files are grounded in docs/implementation/002-bootstrap-implementation-plan.md yet. Alignment of any future consumers against the trimmed reference-only version will be confirmed when those assets are created or updated in subsequent todos (earliest: development/todos/13-fixtures-and-end-to-end-validation.md)."
+      follow_up_story_id: development/todos/13-fixtures-and-end-to-end-validation.md
+    - asset: "docs/implementation/003-proposed-capability-apis.md (canonical catalogue) — coded-agent doc snapshot (src/agent_building_agent/docs/) and any instructed-agent/skill markdown under instructed-agents/ grounded in this doc"
+      decision: deferred
+      rationale: "No coded agents or instructed-agent/skill files are grounded in docs/implementation/003-proposed-capability-apis.md yet. Alignment of any future consumers against the rewritten canonical catalogue will be confirmed when those assets are created or updated in subsequent todos (earliest: development/todos/13-fixtures-and-end-to-end-validation.md)."
+      follow_up_story_id: development/todos/13-fixtures-and-end-to-end-validation.md
+    - asset: "docs/methodology/02-terminology-dictionary.md — story-telling-agent (DOC_RELATIVE_PATHS includes methodology/02-terminology-dictionary.md)"
+      decision: updated
+      rationale: "The terminology dictionary is updated with new capability canonical terms in this story. The story-telling-agent reads this file at runtime; the new rows are additive and do not break existing canonical-term enforcement. No change to the story-telling-agent implementation spec or prompt is required."
+      follow_up_story_id: null
+    - asset: "docs/methodology/02-terminology-dictionary.md — review-validation-agent (DOC_RELATIVE_PATHS includes methodology/02-terminology-dictionary.md)"
+      decision: updated
+      rationale: "Same rationale as story-telling-agent above. New rows are additive; no review-validation-agent implementation change required."
+      follow_up_story_id: null
+  development_cycle:
+    steps:
+      - "Read and cross-reference docs/methodology/001-use-cases-raw.md, docs/implementation/001, 002, and 003 to inventory all existing capability names, their coverage, and inconsistencies."
+      - "Compile the canonical capability list from the resolved decisions (create_session, reimport_system_definition, list_environment_inputs, trace_group_flow, load_bus_trace, read_session_log_book, inject_user_action, set_environment_value, answer_activity_question, list_mutations, fetch_component_details, describe_component, select_setup, describe_session, list_components, summarize_topology, resolve_user_action_candidates, create_mutation, set_parameter_override — 19 capabilities total) and confirm no capability from the use cases is unaccounted for; verify that the six surviving capabilities added from docs/implementation/003 (describe_session, list_components, summarize_topology, resolve_user_action_candidates, create_mutation, set_parameter_override) do not conflict with any existing entry or resolved decision, and record any conflicts as open questions. Note: infer_environment_from_trace is merged into load_bus_trace and must not appear as a separate catalogue entry."
+      - "Draft all per-capability entries in docs/implementation/003 (name, purpose, request, response with evidence and limitations, errors, CLI/SDK/MCP projection with session_label, use-case trace link); remove the duplicate second content block."
+      - "Add catalogue-wide conventions section to 003 preamble: selector syntax (display name and instance path with partial-name matching; individual address and ETS id must be exact); ambiguous-query semantics (returns a set); detail levels SUMMARY/MEDIUM/FULL; log-level model (INFO/DEBUG/FULL, chosen per call or MCP startup arg, default INFO — confirmed decision); persistent current/now system state per setup; active-setup default with optional per-call mutation_name override; freeze note referencing development/todos/13-fixtures-and-end-to-end-validation.md."
+      - "Build the traceability table (use case → capability) and insert it into 003."
+      - "Trim docs/implementation/001 and 002 to preamble-plus-reference-only; migrate any unique content to 003 or discard with explicit justification."
+      - "Before editing docs/methodology/02-terminology-dictionary.md, list all new terms and replaced aliases to be added. Terms already decided in this story (component, session_label, mutation_name, select_setup, reimport_system_definition and its replaced aliases refresh/load_project, answer_activity_question and its replaced aliases, read_session_log_book and its replaced aliases, current/now system state, infer_environment_from_trace as replaced alias, describe_session, list_components, summarize_topology, resolve_user_action_candidates, create_mutation, set_parameter_override, inject_user_action, set_environment_value, 'reviewed draft' as a document-status term) are confirmed and require no further user input. Ask the user only about any term or alias not already decided in this story before proceeding to edit the dictionary."
+      - "Update docs/methodology/02-terminology-dictionary.md with new canonical-term rows for all new/renamed capabilities and parameter names including: reimport_system_definition (and its replaced aliases refresh, load_project), select_setup, current/now system state, session_label, mutation_name, component, answer_activity_question (and its replaced aliases), read_session_log_book (and its replaced aliases), inject_user_action, set_environment_value, describe_session, list_components, summarize_topology, infer_environment_from_trace (recorded as a replaced alias merged into load_bus_trace), resolve_user_action_candidates, create_mutation, set_parameter_override, and 'reviewed draft' (as a document-status term)."
+      - "Mark 003 as 'reviewed draft' with freeze-condition note."
+      - "Hand off to review-validation-agent; resolve any blocking findings via revision-resume flow before backlog insertion."
+      - "Completed 2026-10-24 on branch story/01-capability-catalogue: story review passed with deferred follow-up; consolidated gate passed with deferred follow-up; QA checks Q1-Q10 passed (qa-agent) and 12 non-blocking consistency defects were fixed afterwards; final gate passed. Task-plan tasks T1-T5 were done (planning outputs, review, outcome application, QA, docs/README.md index fix)."
+    review_findings: []
+    deferred_items:
+      - item: "Alignment of coded-agent and instructed-agent/skill files against the updated capability catalogue"
+        reason: "No such files exist yet; alignment deferred to development/todos/13-fixtures-and-end-to-end-validation.md (fixtures and end-to-end validation)."
+        follow_up: development/todos/13-fixtures-and-end-to-end-validation.md
+      - item: "Purpose annotation data (associating purposes with capabilities/entities)"
+        reason: "Deferred to development/todos/14-component-purpose-annotation.md; purpose resolution is an agent/skill-layer concern and does not belong in the core API catalogue."
+        follow_up: development/todos/14-component-purpose-annotation.md
+      - item: "Bus trace file format decision (standard KNX bus trace format to build on, e.g. ETS group/bus monitor export, Wireshark pcap of KNXnet/IP, libraries such as xknx/Calimero)"
+        reason: "Deferred to development/todos/05-bus-trace-ingestion.md (bus-trace ingestion) as a design decision; the load_bus_trace catalogue entry takes a trace file path plus a format indicator as a placeholder."
+        follow_up: development/todos/05-bus-trace-ingestion.md
+      - item: "Later todos still use replaced names or superseded ideas: todo 03 (session id, label, scenario_state), todo 04 (devices; 'find_group_address and load_project missing in 003'), todo 06 ('resettable scenario state'; reset_state was dropped), todo 09 ('device family')"
+        reason: "Outside this story's deliverables (docs/implementation, dictionary, README); each todo is aligned to docs/implementation/003-proposed-capability-apis.md when it is refined into its own story."
+        follow_up: development/todos/06-environment-user-action-and-scenario-state.md
+  open_questions: []

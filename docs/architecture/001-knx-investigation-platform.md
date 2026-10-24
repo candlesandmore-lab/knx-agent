@@ -7,11 +7,11 @@
   - `docs/architecture/001-knx-investigation-platform.md`
   - `docs/implementation/003-proposed-capability-apis.md`
 - change_type: `update`
-- rationale: The repository needs both an initial architecture boundary and a shared vocabulary so later implementation work and agent prompts can refer to the same concepts consistently.
+- rationale: The repository needs both an initial architecture boundary and a shared vocabulary so later implementation work and agent prompts can refer to the same concepts consistently. Story 01 (capability catalogue) adds a clarification-level update: sessions are addressed by `session_label`, "component" is the only term for KNX components, sessions hold a persistent current system state per setup with an active setup, and log levels govern the log books. No subsystem or boundary changes. `docs/architecture/000-terminology.md` does not exist; terminology lives only in `docs/methodology/02-terminology-dictionary.md`, so no change applies there.
 - downstream_impacts:
-  - `docs/implementation/001-solution-concept.md`
-  - `docs/implementation/002-bootstrap-implementation-plan.md`
-  - `development/backlog/active/knx-agent-bootstrap-task-plan.yaml`
+  - `docs/implementation/001-solution-concept.md` (reduced to references)
+  - `docs/implementation/002-bootstrap-implementation-plan.md` (reduced to references)
+  - `docs/implementation/003-proposed-capability-apis.md` (single capability catalogue)
   - future Python package layout and MCP server implementation
 
 ## Terminology dependency
@@ -78,7 +78,7 @@ flowchart LR
     Model --> ETS[ETS .knxproj Import]
     Catalog --> Web[Vendor Web Sources]
     Trace --> Bus[KNX Bus Monitor Traces]
-    Sim --> Rules[Scenario and Device Rules]
+    Sim --> Rules[Scenario and Component Rules]
 ```
 
 ## Core subsystems
@@ -112,7 +112,8 @@ flowchart LR
 ### 2b. Session service
 
 - Creates investigation sessions for users or agents.
-- Assigns a session identifier and a session-unique work-directory.
+- Assigns a `session_label` and a session-unique work-directory.
+- Tracks the active setup (default or a mutation) and the persistent current system state of each setup, persisted after every operation.
 - Persists session metadata in `session-state.yaml`.
 - Requires a `.knxproj` input at session creation time and binds the session to that file's full absolute path.
 - Checks the bound `.knxproj` file on every CLI, SDK, and MCP capability call and triggers re-read when the file has changed.
@@ -122,7 +123,7 @@ flowchart LR
 ### 3. KNX system model
 
 - Parses `.knxproj` content into a normalized domain graph.
-- Represents physical topology, group addresses, devices, communication objects, parameters, links, scenes, and device typing derived from the project.
+- Represents physical topology, group addresses, components, communication objects, parameters, links, scenes, and component typing derived from the project.
 - Stores expected telegram semantics where derivable from project data.
 
 ### 4. Trace interpretation service
@@ -173,34 +174,36 @@ flowchart LR
 - Writing configuration changes back to ETS projects.
 - Direct KNX bus control of a live installation.
 - Safety-critical automation decisions without human review.
-- Full digital twin accuracy for every vendor device from the start.
+- Full digital twin accuracy for every vendor component from the start.
 
 ## Key data contracts
 
 ### Project graph
 
-- Entities: installation, line, area, device, communication object, group address, group membership, parameter, scene, topology connection.
+- Entities: installation, line, area, component, communication object, group address, group membership, parameter, scene, topology connection.
 - Required qualities: stable IDs, source provenance, and import warnings.
 
 ### Session state
 
-- Each investigation session has a unique session identifier.
+- Each investigation session has a unique `session_label`, the only way to address a session on all tool surfaces.
 - Each investigation session owns one work-directory.
 - `session-state.yaml` is the canonical persisted session metadata file.
 - A `.knxproj` file is mandatory when starting a session.
 - The session stores the full absolute path of that `.knxproj` file as its bound source project path.
-- Initial required session-state fields include session identifier, work-directory path, bound source project absolute path, creation metadata, last imported project fingerprint, active artifact references, log-book references, and mutation references.
+- Initial required session-state fields include `session_label`, active setup, work-directory path, bound source project absolute path, creation metadata, last imported project fingerprint, active artifact references, log-book references, and mutation references.
 
 ### Environment model and KNX system state
 
 - The environment model stores primary user-supplied or trace-derived input values.
 - The KNX system state stores the resulting latest simulated or observed state after ordered inputs and ripple-down component communication.
 - Last input wins when multiple values target the same environment element later in the session history.
+- Each setup (the default setup and every mutation) holds its own persistent current system state ("now"), persisted after every operation so stateful CLI sequences work. There is no reset; restarting means creating a new session. Details: `docs/implementation/003-proposed-capability-apis.md`.
 
 ### Session log book
 
 - The session log book stores the ordered history of user inputs, trace loads, environment updates, inferred actions, answers, refresh events, and mutation-scoped work.
 - Mutation-specific log books are separate but their actions are also reflected in the overall session log book.
+- What is written is governed by a log level (INFO default, DEBUG, FULL) chosen per CLI/SDK call or at MCP server startup, not stored per session.
 
 ### Behavior evidence
 
@@ -211,10 +214,11 @@ flowchart LR
 - Capability definitions live in the shared Python core first.
 - CLI, SDK, and MCP are delivery surfaces over the same capability contracts rather than separate implementations.
 - New capabilities are incomplete until their request and response contracts are available on all three surfaces, unless a reviewed exception is recorded.
-- Session-scoped capabilities must accept either an explicit session identifier or a resolved active-session context on each tool surface.
+- Session-scoped capabilities must accept `session_label` on each tool surface.
+- The single authoritative capability catalogue is `docs/implementation/003-proposed-capability-apis.md`.
 - Session-scoped capabilities must perform a project refresh check before using cached project graph state.
 - CLI and MCP adapters must delegate to the same callable core API exposed through the SDK-facing layer so that behavior can be tested once and reused across surfaces.
-- Capability calls may also accept an optional mutation name; if omitted, the default KNX system setup is used.
+- Capability calls act on the session's active setup (initially the default KNX system setup); an optional `mutation_name` overrides the target for that call only.
 - The agent layer is responsible for mapping natural-language user actions onto deterministic capability calls and KNX telegram intents.
 
 ### Scenario state
@@ -229,13 +233,13 @@ flowchart LR
 ## Quality attributes
 
 - Explainability: every diagnostic conclusion should point to tool evidence.
-- Extensibility: new device families and simulation rules should be addable without reworking the whole model.
+- Extensibility: new component families and simulation rules should be addable without reworking the whole model.
 - Determinism: CLI, SDK, and MCP outputs should be structured and reproducible for a given project and scenario.
 - Session durability: a user or agent should be able to resume an investigation session from its work-directory and `session-state.yaml`.
 - Session freshness: every tool-surface call should detect whether the bound `.knxproj` file has changed and refresh the imported project state before answering.
 - Adapter uniformity: CLI and MCP should be thin wrappers over the shared core API, minimizing surface-specific logic.
 - Non-guessing behavior: the agent layer should fail closed and ask for clarification instead of inventing unresolved names or meanings.
-- Incremental coverage: partial device knowledge must degrade gracefully rather than block analysis.
+- Incremental coverage: partial component knowledge must degrade gracefully rather than block analysis.
 - Licensing hygiene: Python dependencies must use free-to-use licenses that permit development, local use, and redistribution of the solution.
 
 ## Risks and constraints
@@ -246,7 +250,7 @@ flowchart LR
 - Project refresh checks should be lightweight and reliable enough to run before every surface call, likely via stored path, mtime, size, and later content fingerprinting.
 - Python package selection is constrained to dependencies with free-to-use licenses, which may exclude otherwise convenient tooling.
 - Vendor web sources can be inconsistent or legally constrained, so fetched knowledge needs caching and provenance.
-- Device behavior may depend on installer intent that is not encoded in project files.
+- Component behavior may depend on installer intent that is not encoded in project files.
 - Simulation correctness depends on a limited, explicit rule set during early phases.
 
 ## Open questions
