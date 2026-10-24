@@ -1,0 +1,95 @@
+# GraphIndex behaviour (story 05, T2). User-editable; graph descriptions as in tests/graph_factory.py.
+
+graphs:
+  mixed:
+    style: TwoLevel
+    areas:
+      - {id: A2, address: 2, name: Second}
+      - {id: A1, address: 1, name: First}
+    lines:
+      - {id: L21, area: A2, address: 1, name: Line 2.1}
+      - {id: L12, area: A1, address: 2, name: Line 1.2}
+      - {id: L10, area: A1, address: 0, name: Backbone}
+    spaces:
+      - id: S1
+        type: Building
+        name: House
+        children:
+          - {id: S2, type: Room, name: Hall}
+    components:
+      - {id: P-1-0_DI-5, line: L21, address: 3, name: Late, in: [S2]}
+      - {id: P-1-0_DI-4, line: L12, address: 10, name: Ten}
+      - {id: P-1-0_DI-3, line: L12, address: 2, name: Two}
+      - {id: P-1-0_DI-2, line: L10, address: 0, name: Coupler}
+      - {id: P-1-0_DI-1, individual_address: null, name: Free}
+      - {id: P-1-0_DI-0, individual_address: "bad", name: Broken}
+    objects:
+      - {component: P-1-0_DI-3, ref: O-2_R-3, number: 2, flags: rx, links: [G2]}
+      - {component: P-1-0_DI-3, ref: O-0_R-1, number: 0, flags: tx, links: [G1, G2]}
+      - {component: P-1-0_DI-3, ref: O-9_R-9, number: null, flags: none}
+      - {component: P-1-0_DI-4, ref: O-0_R-1, number: 0, flags: tx, links: [G1], resolved: false}
+    group_ranges:
+      - {id: R1, name: Main}
+      - {id: R2, name: Middle, parent: R1}
+    group_addresses:
+      - {id: G2, address: "1/2", name: Second, range: R2}
+      - {id: G1, address: "1/1", name: First, range: R2}
+      - {id: G0, address: "0/5", name: Zero}
+    parameters:
+      - {component: P-1-0_DI-3, ref: P-3_R-3, name: beta, value: "1"}
+      - {component: P-1-0_DI-3, ref: P-1_R-1, name: Alpha, value: "2"}
+      - {component: P-1-0_DI-3, ref: P-2_R-2, text: Gamma text, value: "3"}
+      - {component: P-1-0_DI-3, ref: P-0_R-0, value: "4"}
+    warnings:
+      - {code: GROUP_ADDRESS_LINK_UNRESOLVED, message: m, location: "0.xml#P-1-0_DI-3/co/O-2_R-3"}
+      - {code: COMOBJECT_DEFINITION_UNRESOLVED, message: m, location: "0.xml#P-1-0_DI-4/co/O-0_R-1"}
+      - {code: PARAMETER_DEFINITION_UNRESOLVED, message: m, location: "0.xml#P-1-0_DI-3/pa/P-3_R-3"}
+      - {code: DUPLICATE_ID, message: m, location: "0.xml#P-1-0_DI-3"}
+
+cases:
+  - id: component_order_numeric_then_unparsable_last
+    graph: mixed
+    # 1.0.0 is the coupler (area 1 line 0), 1.2.2 before 1.2.10 (numeric, not text), 2.1.3, then unparsable by id.
+    component_order: [P-1-0_DI-2, P-1-0_DI-3, P-1-0_DI-4, P-1-0_DI-5, P-1-0_DI-0, P-1-0_DI-1]
+  - id: instance_paths_and_unplaced
+    graph: mixed
+    instance_paths:
+      P-1-0_DI-5: [House/Hall/Late]
+      P-1-0_DI-3: []
+    location_path:
+      P-1-0_DI-5: [House, Hall]
+      P-1-0_DI-3: []
+    unplaced: [P-1-0_DI-0, P-1-0_DI-1, P-1-0_DI-2, P-1-0_DI-3, P-1-0_DI-4]
+  - id: memberships_in_link_order_per_object_and_by_group_address
+    graph: mixed
+    memberships_by_group_address:
+      G2: [P-1-0_DI-3/co/O-0_R-1, P-1-0_DI-3/co/O-2_R-3]
+      G1: [P-1-0_DI-3/co/O-0_R-1, P-1-0_DI-4/co/O-0_R-1]
+      G0: []
+  - id: warnings_are_indexed_by_object_id_for_link_codes_only
+    graph: mixed
+    warnings_by_object:
+      P-1-0_DI-3/co/O-2_R-3: [GROUP_ADDRESS_LINK_UNRESOLVED]
+      P-1-0_DI-4/co/O-0_R-1: [COMOBJECT_DEFINITION_UNRESOLVED]
+      P-1-0_DI-3: []
+      P-1-0_DI-3/pa/P-3_R-3: []
+  - id: group_range_chain_root_to_leaf
+    graph: mixed
+    range_chain:
+      R2: [Main, Middle]
+      R1: [Main]
+      missing: []
+  - id: parameters_ordered_by_name_or_text_or_ref_casefolded
+    graph: mixed
+    parameter_order:
+      P-1-0_DI-3: [P-1_R-1, P-3_R-3, P-2_R-2, P-0_R-0]
+  - id: objects_ordered_by_number_unnumbered_last
+    graph: mixed
+    object_order:
+      P-1-0_DI-3: [0, 2, null]
+  - id: group_addresses_ordered_by_raw_address
+    graph: mixed
+    group_address_order: [G0, G1, G2]
+  - id: group_address_style_is_read_from_the_installation
+    graph: mixed
+    style: TwoLevel

@@ -1,0 +1,239 @@
+# Topology summary per level (story 05, T4). User-editable.
+# Per case: component_counts (exact), SUMMARY / MEDIUM / FULL (JSON subset of topology_summary), notes (exact).
+
+graphs:
+  no_locations:
+    areas: [{id: A1, address: 1, name: Area}]
+    lines: [{id: L1, area: A1, address: 1, name: Line}]
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: One}
+      - {id: P-1-0_DI-2, line: L1, address: 2, name: Two}
+
+  one_location:
+    areas: [{id: A1, address: 1, name: Area}]
+    lines: [{id: L1, area: A1, address: 1, name: Line}]
+    spaces: [{id: S1, type: Room, name: Study}]
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: One, in: [S1]}
+
+  nested:
+    areas: [{id: A1, address: 1, name: Area}]
+    lines: [{id: L1, area: A1, address: 1, name: Line}]
+    spaces:
+      - id: S6
+        type: Building
+        name: Annex
+      - id: S1
+        type: Building
+        name: Block
+        children:
+          - id: S2
+            type: Floor
+            name: Level 1
+            children:
+              - id: S3
+                type: Room
+                name: Office
+                children:
+                  - {id: S4, type: Corner, name: Desk area}
+              - {id: S5, type: Room, name: Archive}
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: Lamp, in: [S4]}
+      - {id: P-1-0_DI-2, line: L1, address: 2, name: Plug, in: [S3]}
+      - {id: P-1-0_DI-3, line: L1, address: 3, name: Box, in: [S5]}
+      - {id: P-1-0_DI-4, line: L1, address: 4, name: Loose}
+      - {id: P-1-0_DI-5, name: NoLine, individual_address: null}
+
+  empty: {}
+
+  two_areas:
+    areas:
+      - {id: A2, address: 2, name: Beta}
+      - {id: A1, address: 1, name: Alpha}
+    lines:
+      - {id: L21, area: A2, address: 1, name: Line 2.1}
+      - {id: L10, area: A1, address: 0, name: Backbone 1}
+      - {id: L20, area: A2, address: 0, name: Backbone 2}
+      - {id: L11, area: A1, address: 1, name: Line 1.1}
+    components:
+      - {id: P-1-0_DI-5, line: L21, address: 5, name: E}
+      - {id: P-1-0_DI-3, line: L11, address: 2, name: C}
+      - {id: P-1-0_DI-1, line: L10, address: 0, name: A}
+      - {id: P-1-0_DI-4, line: L20, address: 0, name: D}
+      - {id: P-1-0_DI-2, line: L11, address: 1, name: B}
+
+  multi_placement:
+    areas: [{id: A1, address: 1, name: Area}]
+    lines: [{id: L1, area: A1, address: 1, name: Line}]
+    spaces:
+      - id: S1
+        type: Building
+        name: House
+        children:
+          - {id: S2, type: Room, name: Room A}
+          - {id: S3, type: Room, name: Room B}
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: Twin, in: [S2, S3]}
+
+  parent_cycle:
+    areas: [{id: A1, address: 1, name: Area}]
+    lines: [{id: L1, area: A1, address: 1, name: Line}]
+    spaces:
+      - {id: S1, type: Room, name: Alpha, parent: S2}
+      - {id: S2, type: Room, name: Beta, parent: S1}
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: Lamp, in: [S1]}
+
+cases:
+  - id: no_locations
+    graph: no_locations
+    component_counts: {total: 2, placed: 0, unplaced: 2, by_component_type: {UNTYPED: 2}}
+    keys:
+      SUMMARY: [counts, locations_by_type]
+      MEDIUM: [counts, locations_by_type, areas, locations, unplaced_component_count, unassigned_to_line]
+      FULL: [counts, locations_by_type, areas, locations, unplaced_component_count, unassigned_to_line, unplaced_components, unassigned_components]
+    SUMMARY: {counts: {areas: 1, lines: 1, locations: 0}, locations_by_type: {}}
+    MEDIUM:
+      locations: []
+      unplaced_component_count: 2
+      unassigned_to_line: 0
+      areas:
+        - {ets_id: A1, address: 1, component_count: 2, lines: [{ets_id: L1, address: 1, address_text: "1.1", component_count: 2}]}
+    FULL:
+      locations: []
+      unplaced_components: [{ets_id: P-1-0_DI-1, name: One, individual_address: "1.1.1"}, {ets_id: P-1-0_DI-2}]
+      unassigned_components: []
+      areas:
+        - lines: [{ets_id: L1, components: [{ets_id: P-1-0_DI-1}, {ets_id: P-1-0_DI-2}]}]
+    notes:
+      - "The project encodes no locations; the topology summary has no location entries."
+      - "2 components are not placed in a location."
+
+  - id: one_location
+    graph: one_location
+    component_counts: {total: 1, placed: 1, unplaced: 0, by_component_type: {UNTYPED: 1}}
+    keys:
+      SUMMARY: [counts, locations_by_type]
+      MEDIUM: [counts, locations_by_type, areas, locations, unplaced_component_count, unassigned_to_line]
+      FULL: [counts, locations_by_type, areas, locations, unplaced_component_count, unassigned_to_line, unplaced_components, unassigned_components]
+    SUMMARY: {counts: {areas: 1, lines: 1, locations: 1}, locations_by_type: {Room: 1}}
+    MEDIUM:
+      locations: [{ets_id: S1, name: Study, space_type: Room, path: Study, depth: 1, component_count: 1, component_count_total: 1}]
+      unplaced_component_count: 0
+    FULL:
+      locations: [{ets_id: S1, components: [{ets_id: P-1-0_DI-1, name: One}]}]
+      unplaced_components: []
+    notes: []
+
+  - id: four_level_nesting_unplaced_and_no_line
+    graph: nested
+    component_counts: {total: 5, placed: 3, unplaced: 2, by_component_type: {UNTYPED: 5}}
+    keys:
+      SUMMARY: [counts, locations_by_type]
+      MEDIUM: [counts, locations_by_type, areas, locations, unplaced_component_count, unassigned_to_line]
+      FULL: [counts, locations_by_type, areas, locations, unplaced_component_count, unassigned_to_line, unplaced_components, unassigned_components]
+    SUMMARY:
+      counts: {areas: 1, lines: 1, locations: 6}
+      locations_by_type: {Building: 2, Corner: 1, Floor: 1, Room: 2}
+    MEDIUM:
+      unplaced_component_count: 2
+      unassigned_to_line: 1
+      areas: [{ets_id: A1, component_count: 4, lines: [{ets_id: L1, component_count: 4}]}]
+      locations:
+        - {ets_id: S6, path: Annex, depth: 1, component_count: 0, component_count_total: 0}
+        - {ets_id: S1, path: Block, depth: 1, component_count: 0, component_count_total: 3}
+        - {ets_id: S2, path: Block/Level 1, depth: 2, component_count: 0, component_count_total: 3}
+        - {ets_id: S5, path: Block/Level 1/Archive, depth: 3, component_count: 1, component_count_total: 1}
+        - {ets_id: S3, path: Block/Level 1/Office, depth: 3, component_count: 1, component_count_total: 2}
+        - {ets_id: S4, path: Block/Level 1/Office/Desk area, depth: 4, component_count: 1, component_count_total: 1}
+    FULL:
+      areas:
+        - lines:
+            - components: [{ets_id: P-1-0_DI-1, name: Lamp}, {ets_id: P-1-0_DI-2}, {ets_id: P-1-0_DI-3}, {ets_id: P-1-0_DI-4}]
+      locations:
+        - {ets_id: S6, components: []}
+        - {ets_id: S1, components: []}
+        - {ets_id: S2, components: []}
+        - {ets_id: S5, components: [{ets_id: P-1-0_DI-3, name: Box}]}
+        - {ets_id: S3, components: [{ets_id: P-1-0_DI-2}]}
+        - {ets_id: S4, components: [{ets_id: P-1-0_DI-1}]}
+      unplaced_components: [{ets_id: P-1-0_DI-4, name: Loose}, {ets_id: P-1-0_DI-5, name: NoLine, individual_address: null}]
+      unassigned_components: [{ets_id: P-1-0_DI-5, name: NoLine}]
+    notes:
+      - "2 components are not placed in a location."
+      - "1 components are not assigned to a line."
+
+  - id: empty_project
+    graph: empty
+    component_counts: {total: 0, placed: 0, unplaced: 0, by_component_type: {}}
+    keys:
+      SUMMARY: [counts, locations_by_type]
+      MEDIUM: [counts, locations_by_type, areas, locations, unplaced_component_count, unassigned_to_line]
+      FULL: [counts, locations_by_type, areas, locations, unplaced_component_count, unassigned_to_line, unplaced_components, unassigned_components]
+    SUMMARY: {counts: {areas: 0, lines: 0, locations: 0}, locations_by_type: {}}
+    MEDIUM: {areas: [], locations: [], unplaced_component_count: 0, unassigned_to_line: 0}
+    FULL: {unplaced_components: [], unassigned_components: []}
+    notes: ["The project encodes no locations; the topology summary has no location entries."]
+
+  - id: two_areas_with_backbone_lines
+    graph: two_areas
+    component_counts: {total: 5, placed: 0, unplaced: 5, by_component_type: {COUPLER: 2, UNTYPED: 3}}
+    keys:
+      SUMMARY: [counts, locations_by_type]
+      MEDIUM: [counts, locations_by_type, areas, locations, unplaced_component_count, unassigned_to_line]
+      FULL: [counts, locations_by_type, areas, locations, unplaced_component_count, unassigned_to_line, unplaced_components, unassigned_components]
+    SUMMARY: {counts: {areas: 2, lines: 4, locations: 0}}
+    MEDIUM:
+      areas:
+        - ets_id: A1
+          address: 1
+          name: Alpha
+          component_count: 3
+          lines:
+            - {ets_id: L10, address: 0, address_text: "1.0", name: Backbone 1, component_count: 1}
+            - {ets_id: L11, address: 1, address_text: "1.1", name: Line 1.1, component_count: 2}
+        - ets_id: A2
+          address: 2
+          component_count: 2
+          lines:
+            - {ets_id: L20, address: 0, address_text: "2.0", component_count: 1}
+            - {ets_id: L21, address: 1, address_text: "2.1", component_count: 1}
+    FULL:
+      areas:
+        - lines: [{components: [{ets_id: P-1-0_DI-1, individual_address: "1.0.0"}]}, {components: [{ets_id: P-1-0_DI-2}, {ets_id: P-1-0_DI-3}]}]
+        - lines: [{components: [{ets_id: P-1-0_DI-4}]}, {components: [{ets_id: P-1-0_DI-5}]}]
+    notes:
+      - "The project encodes no locations; the topology summary has no location entries."
+      - "5 components are not placed in a location."
+
+  - id: component_in_two_locations_is_counted_in_each_and_once_in_totals
+    graph: multi_placement
+    component_counts: {total: 1, placed: 1, unplaced: 0, by_component_type: {UNTYPED: 1}}
+    keys:
+      SUMMARY: [counts, locations_by_type]
+      MEDIUM: [counts, locations_by_type, areas, locations, unplaced_component_count, unassigned_to_line]
+      FULL: [counts, locations_by_type, areas, locations, unplaced_component_count, unassigned_to_line, unplaced_components, unassigned_components]
+    SUMMARY: {counts: {locations: 3}, locations_by_type: {Building: 1, Room: 2}}
+    MEDIUM:
+      locations:
+        - {ets_id: S1, path: House, component_count: 0, component_count_total: 1}
+        - {ets_id: S2, path: House/Room A, component_count: 1, component_count_total: 1}
+        - {ets_id: S3, path: House/Room B, component_count: 1, component_count_total: 1}
+    FULL:
+      locations: [{components: []}, {components: [{ets_id: P-1-0_DI-1}]}, {components: [{ets_id: P-1-0_DI-1}]}]
+    notes: []
+
+  - id: parent_cycle_terminates
+    graph: parent_cycle
+    component_counts: {total: 1, placed: 1, unplaced: 0, by_component_type: {UNTYPED: 1}}
+    keys:
+      SUMMARY: [counts, locations_by_type]
+      MEDIUM: [counts, locations_by_type, areas, locations, unplaced_component_count, unassigned_to_line]
+      FULL: [counts, locations_by_type, areas, locations, unplaced_component_count, unassigned_to_line, unplaced_components, unassigned_components]
+    SUMMARY: {counts: {locations: 2}, locations_by_type: {Room: 2}}
+    MEDIUM:
+      locations:
+        - {ets_id: S1, path: Alpha, depth: 1, component_count: 1, component_count_total: 1}
+        - {ets_id: S2, path: Alpha/Beta, depth: 2, component_count: 0, component_count_total: 0}
+    FULL: {unplaced_components: []}
+    notes: []

@@ -1,0 +1,80 @@
+# SDK / CLI / MCP parity cases (story 05, T7). User-editable.
+# Every case runs the same request on all three surfaces on the default synthetic project (components Sensor 1.1.1,
+# Controller 1.1.2, Actuator 1.1.3 on line 1.1; group addresses 0/0/1 Light, 0/0/2 Brightness, 0/0/3 Status;
+# locations House > Ground floor > Hall holding Sensor and Controller).
+# success_cases: identical JSON on all surfaces (and expect: JSON subset of it).
+# error_cases: identical code and details.reason (and the full ErrorInfo) on all surfaces.
+# cli_unsupported: argument sets that typer itself rejects (required option missing): SDK and MCP only.
+
+success_cases:
+  - {id: list_all_default_level, capability: list_components, args: {}, expect: {match_count: 3, ambiguous: false, envelope: {detail_level: MEDIUM, setup: default}}}
+  - {id: list_name_summary, capability: list_components, args: {component_selector: sensor, detail_level: SUMMARY}, expect: {match_count: 1, matches: [{match_kinds: [NAME]}]}}
+  - {id: list_individual_address, capability: list_components, args: {component_selector: "1.1.2", detail_level: FULL}, expect: {match_count: 1, matches: [{match_kinds: [INDIVIDUAL_ADDRESS]}]}}
+  - {id: list_ets_id_lower_case_options, capability: list_components, args: {component_selector: P-0001-0_DI-1, selector_kind: ets_id, detail_level: full}, expect: {match_count: 1, envelope: {detail_level: FULL}}}
+  - {id: list_instance_path, capability: list_components, args: {component_selector: "House/Ground floor/Hall/Sensor", selector_kind: INSTANCE_PATH}, expect: {match_count: 1}}
+  - {id: list_location_query, capability: list_components, args: {component_selector: "Ground floor/Hall/"}, expect: {match_count: 2, ambiguous: true}}
+  - {id: list_empty_set, capability: list_components, args: {component_selector: nothing-here}, expect: {matches: [], match_count: 0, ambiguous: false}}
+  - {id: list_mutation_default, capability: list_components, args: {mutation_name: default}, expect: {match_count: 3}}
+  - {id: list_mutation_empty, capability: list_components, args: {mutation_name: ""}, expect: {match_count: 3}}
+  - {id: describe_unambiguous, capability: describe_component, args: {component_selector: Controller}, expect: {match_count: 1, ambiguous: false}}
+  - {id: describe_ambiguous, capability: describe_component, args: {component_selector: o}, expect: {ambiguous: true}}
+  - {id: describe_full, capability: describe_component, args: {component_selector: "1.1.1", detail_level: FULL}, expect: {match_count: 1}}
+  - {id: topology_summary, capability: summarize_topology, args: {detail_level: SUMMARY}, expect: {topology_summary: {counts: {areas: 1, lines: 1, locations: 3}}, component_counts: {total: 3, placed: 2, unplaced: 1}}}
+  - {id: topology_default_medium, capability: summarize_topology, args: {}, expect: {envelope: {detail_level: MEDIUM}}}
+  - {id: topology_full, capability: summarize_topology, args: {detail_level: FULL}, expect: {component_counts: {total: 3}}}
+  - {id: flow_address_summary, capability: trace_group_flow, args: {group_address_selector: "0/0/1", detail_level: SUMMARY}, expect: {match_count: 1, group_addresses: [{current_value: unknown}]}}
+  - {id: flow_address_full, capability: trace_group_flow, args: {group_address_selector: "0/0/1", detail_level: FULL}, expect: {match_count: 1}}
+  - {id: flow_partial_name, capability: trace_group_flow, args: {group_address_selector: s}, expect: {ambiguous: true, match_count: 2}}
+  - {id: flow_object_ref, capability: trace_group_flow, args: {communication_object_ref: "P-0001-0_DI-2/co/O-2_R-3"}, expect: {match_count: 2, ambiguous: true}}
+  - {id: flow_object_ref_without_link, capability: trace_group_flow, args: {communication_object_ref: "P-0001-0_DI-2/co/O-3_R-4"}, expect: {match_count: 0, group_addresses: []}}
+
+error_cases:
+  - {id: describe_unresolved, capability: describe_component, args: {component_selector: Nope}, code: SELECTOR_UNRESOLVED}
+  - {id: flow_unresolved, capability: trace_group_flow, args: {group_address_selector: "9/0/9"}, code: SELECTOR_UNRESOLVED}
+  - {id: list_blank, capability: list_components, args: {component_selector: "  "}, code: INVALID_REQUEST, reason: SELECTOR_BLANK}
+  - {id: list_kind_unknown, capability: list_components, args: {component_selector: x, selector_kind: ROOM}, code: INVALID_REQUEST, reason: SELECTOR_KIND_UNKNOWN}
+  - {id: list_kind_mismatch, capability: list_components, args: {component_selector: "1.1", selector_kind: INDIVIDUAL_ADDRESS}, code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH}
+  - {id: list_kind_without_selector, capability: list_components, args: {selector_kind: NAME}, code: INVALID_REQUEST, reason: SELECTOR_KIND_WITHOUT_SELECTOR}
+  - {id: flow_conflict, capability: trace_group_flow, args: {group_address_selector: "0/0/1", communication_object_ref: "P-0001-0_DI-1/co/O-0_R-1"}, code: INVALID_REQUEST, reason: SELECTOR_CONFLICT}
+  - {id: flow_missing, capability: trace_group_flow, args: {}, code: INVALID_REQUEST, reason: SELECTOR_MISSING}
+  - {id: flow_blank, capability: trace_group_flow, args: {group_address_selector: " "}, code: INVALID_REQUEST, reason: SELECTOR_BLANK}
+  - {id: flow_bad_object_ref, capability: trace_group_flow, args: {communication_object_ref: nope}, code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH}
+  - {id: list_invalid_detail_level, capability: list_components, args: {detail_level: wide}, code: INVALID_DETAIL_LEVEL}
+  - {id: describe_invalid_detail_level, capability: describe_component, args: {component_selector: Sensor, detail_level: wide}, code: INVALID_DETAIL_LEVEL}
+  - {id: topology_invalid_detail_level, capability: summarize_topology, args: {detail_level: wide}, code: INVALID_DETAIL_LEVEL}
+  - {id: flow_invalid_detail_level, capability: trace_group_flow, args: {group_address_selector: "0/0/1", detail_level: wide}, code: INVALID_DETAIL_LEVEL}
+  - {id: list_mutation_x, capability: list_components, args: {mutation_name: x}, code: MUTATION_NOT_FOUND}
+  - {id: describe_mutation_x, capability: describe_component, args: {component_selector: Sensor, mutation_name: x}, code: MUTATION_NOT_FOUND}
+  - {id: topology_mutation_x, capability: summarize_topology, args: {mutation_name: x}, code: MUTATION_NOT_FOUND}
+  - {id: flow_mutation_x, capability: trace_group_flow, args: {group_address_selector: "0/0/1", mutation_name: x}, code: MUTATION_NOT_FOUND}
+
+session_not_found:
+  - {capability: list_components, args: {}}
+  - {capability: describe_component, args: {component_selector: Sensor}}
+  - {capability: summarize_topology, args: {}}
+  - {capability: trace_group_flow, args: {group_address_selector: "0/0/1"}}
+
+cli_unsupported:
+  - {id: describe_missing_selector, capability: describe_component, args: {}, code: INVALID_REQUEST, reason: SELECTOR_MISSING}
+
+# Option / argument names of the 003 projection table.
+cli_options:
+  list-components: ["--session", "--session-root", "--query", "--selector-kind", "--detail-level", "--mutation", "--log-level"]
+  describe-component: ["--session", "--session-root", "--component", "--selector-kind", "--detail-level", "--mutation", "--log-level"]
+  summarize-topology: ["--session", "--session-root", "--detail-level", "--mutation", "--log-level"]
+  trace-group-flow: ["--session", "--session-root", "--group-address", "--object-ref", "--detail-level", "--mutation", "--log-level"]
+mcp_arguments:
+  list_components: [session_label, component_selector, selector_kind, detail_level, mutation_name]
+  describe_component: [session_label, component_selector, selector_kind, detail_level, mutation_name]
+  summarize_topology: [session_label, detail_level, mutation_name]
+  trace_group_flow: [session_label, group_address_selector, communication_object_ref, detail_level, mutation_name]
+mcp_required:
+  list_components: [session_label]
+  describe_component: [session_label, component_selector]
+  summarize_topology: [session_label]
+  trace_group_flow: [session_label]
+sdk_parameters:
+  list_components: [session_label, component_selector, selector_kind, detail_level, mutation_name, log_level]
+  describe_component: [session_label, component_selector, selector_kind, detail_level, mutation_name, log_level]
+  summarize_topology: [session_label, detail_level, mutation_name, log_level]
+  trace_group_flow: [session_label, group_address_selector, communication_object_ref, detail_level, mutation_name, log_level]

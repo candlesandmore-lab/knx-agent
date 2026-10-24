@@ -1,0 +1,63 @@
+# list_components / describe_component assembly (story 05, T3). User-editable.
+# op: list | describe. selector / kind omitted = not given. level defaults to MEDIUM.
+# expect: ids (in order), match_count, ambiguous, optional match_kinds {id: [...]} or error {code, reason, details}.
+
+graphs:
+  people:
+    areas: [{id: A1, address: 1, name: Area One}]
+    lines: [{id: L1, area: A1, address: 1, name: Line One}]
+    spaces: [{id: S1, type: Room, name: Hall}]
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: Wall Switch, in: [S1]}
+      - {id: P-1-0_DI-2, line: L1, address: 2, name: Wall Dimmer, in: [S1]}
+      - {id: P-1-0_DI-3, line: L1, address: 3, name: Roof Light}
+  empty:
+    areas: []
+
+cases:
+  # -- list_components -----------------------------------------------------------------------------
+  - {id: list_all_is_not_ambiguous, op: list, graph: people, expect: {ids: [P-1-0_DI-1, P-1-0_DI-2, P-1-0_DI-3], match_count: 3, ambiguous: false, no_match_kinds: true}}
+  - {id: list_one_match_is_not_ambiguous, op: list, graph: people, selector: roof, expect: {ids: [P-1-0_DI-3], match_count: 1, ambiguous: false, match_kinds: {P-1-0_DI-3: [NAME]}}}
+  - {id: list_partial_name_is_ambiguous, op: list, graph: people, selector: wall, expect: {ids: [P-1-0_DI-1, P-1-0_DI-2], match_count: 2, ambiguous: true, match_kinds: {P-1-0_DI-1: [NAME], P-1-0_DI-2: [NAME]}}}
+  - {id: list_no_match_is_an_empty_set, op: list, graph: people, selector: nothing, expect: {ids: [], match_count: 0, ambiguous: false}}
+  - {id: list_empty_project, op: list, graph: empty, expect: {ids: [], match_count: 0, ambiguous: false}}
+  - {id: list_summary_with_selector_has_match_kinds, op: list, graph: people, selector: "1.1.2", level: SUMMARY, expect: {ids: [P-1-0_DI-2], match_count: 1, ambiguous: false, match_kinds: {P-1-0_DI-2: [INDIVIDUAL_ADDRESS]}}}
+  - {id: list_location_query, op: list, graph: people, selector: "Hall/", level: FULL, expect: {ids: [P-1-0_DI-1, P-1-0_DI-2], match_count: 2, ambiguous: true, match_kinds: {P-1-0_DI-1: [INSTANCE_PATH], P-1-0_DI-2: [INSTANCE_PATH]}}}
+  - {id: list_kind_without_selector, op: list, graph: people, kind: NAME, expect: {error: {code: INVALID_REQUEST, reason: SELECTOR_KIND_WITHOUT_SELECTOR}}}
+  - {id: list_any_kind_without_selector, op: list, graph: people, kind: ANY, expect: {error: {code: INVALID_REQUEST, reason: SELECTOR_KIND_WITHOUT_SELECTOR}}}
+  - {id: list_blank_selector, op: list, graph: people, selector: "   ", expect: {error: {code: INVALID_REQUEST, reason: SELECTOR_BLANK}}}
+  - {id: list_kind_mismatch, op: list, graph: people, selector: "1.1", kind: INDIVIDUAL_ADDRESS, expect: {error: {code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH}}}
+  # -- describe_component --------------------------------------------------------------------------
+  - {id: describe_unambiguous, op: describe, graph: people, selector: P-1-0_DI-3, expect: {ids: [P-1-0_DI-3], match_count: 1, ambiguous: false, match_kinds: {P-1-0_DI-3: [ETS_ID]}}}
+  - {id: describe_ambiguous_set, op: describe, graph: people, selector: wall, level: FULL, expect: {ids: [P-1-0_DI-1, P-1-0_DI-2], match_count: 2, ambiguous: true}}
+  - {id: describe_summary, op: describe, graph: people, selector: "1.1.1", level: SUMMARY, expect: {ids: [P-1-0_DI-1], match_count: 1, ambiguous: false}}
+  - id: describe_nothing_matches_any
+    op: describe
+    graph: people
+    selector: "1.1.3x"
+    expect:
+      error:
+        code: SELECTOR_UNRESOLVED
+        details: {selector: "1.1.3x", selector_kind: ANY, evaluated_kinds: [NAME]}
+  - id: describe_nothing_matches_address_form
+    op: describe
+    graph: people
+    selector: " 1.1.99 "
+    expect:
+      error:
+        code: SELECTOR_UNRESOLVED
+        details: {selector: "1.1.99", selector_kind: ANY, evaluated_kinds: [INDIVIDUAL_ADDRESS, NAME]}
+  - id: describe_nothing_matches_explicit_kind
+    op: describe
+    graph: people
+    selector: P-1-0_DI-99
+    kind: ETS_ID
+    expect:
+      error:
+        code: SELECTOR_UNRESOLVED
+        details: {selector: P-1-0_DI-99, selector_kind: ETS_ID, evaluated_kinds: [ETS_ID]}
+  - {id: describe_unplaced_path_unresolved, op: describe, graph: people, selector: "Roof/", kind: INSTANCE_PATH, expect: {error: {code: SELECTOR_UNRESOLVED, details: {selector: "Roof/", selector_kind: INSTANCE_PATH, evaluated_kinds: [INSTANCE_PATH]}}}}
+  - {id: describe_missing_selector, op: describe, graph: people, expect: {error: {code: INVALID_REQUEST, reason: SELECTOR_MISSING}}}
+  - {id: describe_blank_selector, op: describe, graph: people, selector: "", expect: {error: {code: INVALID_REQUEST, reason: SELECTOR_BLANK}}}
+  - {id: describe_kind_mismatch, op: describe, graph: people, selector: DI-3, kind: ETS_ID, expect: {error: {code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH}}}
+  - {id: describe_empty_project_unresolved, op: describe, graph: empty, selector: anything, expect: {error: {code: SELECTOR_UNRESOLVED}}}

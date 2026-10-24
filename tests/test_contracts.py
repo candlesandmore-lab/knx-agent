@@ -1,8 +1,38 @@
 """Contract model tests: envelope, evidence sources, error shape, log levels, session contracts."""
 
+import json
+
 import pytest
+from conftest import fixture_cases
 from pydantic import ValidationError
 
+from knx_agent.contracts import (
+    ComponentDerived,
+    ComponentDerivedFull,
+    ComponentFullView,
+    ComponentIdentity,
+    ComponentMediumView,
+    ComponentSummaryView,
+    ComponentTopology,
+    EngineeringMetadata,
+    FlowEntryFull,
+    FlowEntryMedium,
+    FlowEntrySummary,
+    KnxAgentError,
+    ListComponentsResponse,
+    ProductView,
+    ApplicationView,
+    SelectorKind,
+    SummarizeTopologyResponse,
+    TopologyCounts,
+    TopologySummaryBasic,
+    TopologySummaryFull,
+    TopologySummaryMedium,
+    TraceGroupFlowResponse,
+    TypingBasisView,
+    parse_detail_level,
+    parse_selector_kind,
+)
 from knx_agent.contracts import (
     CreateSessionResponse,
     DescribeSessionRequest,
@@ -133,4 +163,105 @@ def test_models_serialise_and_expose_json_schema(client, project):
     }  # fmt: skip
     assert set(ReimportSystemDefinitionResponse.model_fields) == {
         "project_refresh_status", "project_import_summary", "changes", "invalidated_references", "envelope",
+    }  # fmt: skip
+
+
+# --- story 05: query contracts ---------------------------------------------------------------------
+def _identity() -> ComponentIdentity:
+    return ComponentIdentity(name="n", individual_address="1.1.1", ets_id="P-1-0_DI-1", instance_path=None)
+
+
+def _views():
+    summary = ComponentSummaryView(identity=_identity(), derived=ComponentDerived(component_type="SENSOR"))
+    medium = ComponentMediumView(
+        identity=_identity(), derived=ComponentDerived(component_type="SENSOR"), topology=ComponentTopology()
+    )
+    full = ComponentFullView(
+        identity=_identity(),
+        derived=ComponentDerivedFull(component_type="SENSOR", typing_rule_id="CT4_DIRECTION", typing_basis=TypingBasisView()),
+        topology=ComponentTopology(),
+        match_kinds=["NAME"],
+        product=ProductView(),
+        application=ApplicationView(),
+        engineering_metadata=EngineeringMetadata(),
+    )
+    return summary, medium, full
+
+
+def test_component_views_serialise_only_their_own_level():
+    summary, medium, full = _views()
+    summary_json, medium_json, full_json = (json.loads(v.model_dump_json()) for v in (summary, medium, full))
+    assert set(summary_json) == {"identity", "derived"}  # match_kinds absent when no selector was given
+    assert set(medium_json) == {"identity", "derived", "topology", "component_parameters"}
+    assert set(full_json) == {
+        "identity", "derived", "match_kinds", "topology", "component_parameters", "group_addresses",
+        "communication_objects", "product", "application", "engineering_metadata",
+    }  # fmt: skip
+    assert "communication_objects" not in medium_json and "topology" not in summary_json
+    assert summary_json["derived"] == {"fact_kind": "DERIVED", "component_type": "SENSOR"}
+    assert set(full_json["derived"]) == {"fact_kind", "component_type", "typing_rule_id", "typing_basis"}
+    assert not any("purpose" in key for key in full_json)
+    assert set(summary_json) < set(medium_json) < set(full_json)
+
+
+def test_response_models_keep_the_level_of_each_view_and_round_trip():
+    summary, medium, full = _views()
+    for view in (summary, medium, full):
+        response = ListComponentsResponse(matches=[view], match_count=1, envelope=ResponseEnvelope())
+        dumped = json.loads(response.model_dump_json())
+        assert set(dumped["matches"][0]) == set(json.loads(view.model_dump_json()))
+        parsed = ListComponentsResponse.model_validate_json(response.model_dump_json())
+        assert type(parsed.matches[0]) is type(view)
+        assert parsed == response
+
+
+def test_view_models_forbid_unknown_fields():
+    with pytest.raises(ValidationError):
+        ComponentSummaryView(identity=_identity(), derived=ComponentDerived(component_type="X"), purpose_annotation="p")
+    assert "purpose_summary" not in SummarizeTopologyResponse.model_fields
+    assert "purpose_annotation" not in ComponentFullView.model_fields
+
+
+def test_topology_and_flow_models_are_level_distinct():
+    basic = TopologySummaryBasic(counts=TopologyCounts())
+    medium_fields = {"areas": [], "locations": [], "unplaced_component_count": 0, "unassigned_to_line": 0}
+    medium = TopologySummaryMedium(counts=TopologyCounts(), **medium_fields)
+    full = TopologySummaryFull(counts=TopologyCounts(), **medium_fields, unplaced_components=[], unassigned_components=[])
+    keys = [set(json.loads(m.model_dump_json())) for m in (basic, medium, full)]
+    assert keys[0] < keys[1] < keys[2]
+    assert "areas" not in keys[0] and "unplaced_components" not in keys[1]
+    assert set(FlowEntrySummary.model_fields) == set(FlowEntryMedium.model_fields) == set(FlowEntryFull.model_fields)
+    response = TraceGroupFlowResponse(group_addresses=[], envelope=ResponseEnvelope())
+    assert response.match_count == 0 and response.ambiguous is False
+
+
+@pytest.mark.parametrize("case", fixture_cases("query_request_cases.yaml", "detail_levels"))
+def test_parse_detail_level(case):
+    if "error" in case:
+        with pytest.raises(KnxAgentError) as excinfo:
+            parse_detail_level(case["value"])
+        assert excinfo.value.error.code == case["error"]
+        assert excinfo.value.error.details["allowed"] == ["SUMMARY", "MEDIUM", "FULL"]
+    else:
+        assert parse_detail_level(case["value"]).value == case["expected"]
+
+
+@pytest.mark.parametrize("case", fixture_cases("query_request_cases.yaml", "selector_kinds"))
+def test_parse_selector_kind(case):
+    if "error" in case:
+        with pytest.raises(KnxAgentError) as excinfo:
+            parse_selector_kind(case["value"])
+        assert excinfo.value.error.code == case["error"]
+        assert excinfo.value.error.details["reason"] == case["reason"]
+        assert excinfo.value.error.details["allowed"] == [k.value for k in SelectorKind]
+    else:
+        assert parse_selector_kind(case["value"]).value == case["expected"]
+
+
+def test_query_error_constants():
+    for name in ("SELECTOR_UNRESOLVED", "MUTATION_NOT_FOUND", "INVALID_DETAIL_LEVEL"):
+        assert getattr(error_codes, name) == name
+    assert set(error_codes.INVALID_REQUEST_SELECTOR_REASONS) == {
+        "SELECTOR_BLANK", "SELECTOR_MISSING", "SELECTOR_CONFLICT", "SELECTOR_KIND_UNKNOWN",
+        "SELECTOR_KIND_MISMATCH", "SELECTOR_KIND_WITHOUT_SELECTOR",
     }  # fmt: skip

@@ -60,8 +60,11 @@ One callable core API is projected identically onto the Python SDK, the `typer` 
   (partial-name matching), individual address (exact), ETS id (exact). Any one of them may be given.
   Selector kind is inferred from the value; optional `selector_kind` (`ANY` default, `NAME`,
   `INSTANCE_PATH`, `INDIVIDUAL_ADDRESS`, `ETS_ID`) disambiguates **(proposal)**.
+- Instance path (story 05, user decision 2026-10-24): the ETS location path Building/Floor/Room plus the
+  component name, segments separated by `/` (term `Instance path`); a location is a space of the ETS location
+  tree. Grammar and kind detection: section "Component inspection (story 05)".
 - Group address selector (`group_address_selector`): group address (exact) or group address name
-  (partial) **(proposal)**.
+  (partial) **(proposal)**; rules: section "Component inspection (story 05)".
 - An ambiguous query returns the set of matches. State-changing calls with an ambiguous selector
   change nothing and return the set with `status: AMBIGUOUS` so the caller can refine **(proposal)**.
   A selector matching nothing is the error `SELECTOR_UNRESOLVED`.
@@ -81,7 +84,11 @@ One callable core API is projected identically onto the Python SDK, the `typer` 
 - `MEDIUM`: `SUMMARY` plus setup context needed for most troubleshooting questions.
 - `FULL`: everything the solution has, including group addresses, communication objects, enriched
   metadata and purpose annotation when available.
-Which concrete fields belong to MEDIUM is deferred to `development/todos/04-knxproj-import-and-setup-inspection.md`.
+Which concrete fields belong to MEDIUM was deferred to todo 04 and is decided by story 05 (user decision
+2026-10-24): for `list_components`, `describe_component`, `summarize_topology` and `trace_group_flow` the three
+levels are DISTINCT and their exact fields are listed in section "Component inspection (story 05)", which
+overrides the generic wording above for these four capabilities (for example SUMMARY there carries identity,
+component type and instance path, not parameters).
 
 ### C5. Current system state per setup ("now")
 - Each setup holds a persistent **current system state** ("now"), persisted after every operation so
@@ -163,36 +170,36 @@ CLI/SDK/MCP names were confirmed by the user (still subject to the freeze condit
 - Projection: CLI `knx-agent session log-book --session <session_label> [--mutation <name>] [--min-level ERROR|INFO|DEBUG|FULL] [--limit <n>] [--since-entry-id <id>]`; SDK `client.read_session_log_book(...)`; MCP `read_session_log_book`.
 
 ### 6. `list_components` (UC 1.1, 1.2)
-- Purpose: query components by (partial) selector, or list all.
-- Request: `component_selector?` (omitted = broad listing), `selector_kind?`, `detail_level?`, `mutation_name?`. No `purpose` parameter (see agent layer note).
-- Response: `matches`, `match_count`, `ambiguous` (true when more than one), `detail_level`, envelope. `purpose_annotation` appears per match when available (todo 14).
-- Evidence/limits: `KNXPROJ`; mutation delta values flagged when a mutation is targeted.
-- Errors: none beyond common (no match returns an empty set for a listing; `SELECTOR_UNRESOLVED` is not raised here) **(proposal)**.
-- Projection: CLI `knx-agent setup list-components --session <session_label> [--query <text>] [--selector-kind <kind>] [--detail-level ...] [--mutation <name>]`; SDK `client.list_components(...)`; MCP `list_components`.
+- Purpose: query components by (partial) selector, or list all. Realised by story 05: section "Component inspection (story 05)" defines selector grammar, kind detection, the component view per detail level, ordering and errors.
+- Request: `session_label`, `component_selector?` (omitted = broad listing), `selector_kind?` (`ANY` default), `detail_level?`, `mutation_name?` (accepted; `MUTATION_NOT_FOUND` until todo 08). No `purpose` parameter (see agent layer note).
+- Response: `matches` (component views), `match_count`, `ambiguous` (true when a selector was given and more than one component matches; a broad listing is not ambiguous), envelope (`detail_level` is echoed in the envelope). `purpose_annotation` appears per match when available (todo 14; absent before).
+- Evidence/limits: `KNXPROJ`; read-only. Mutation delta values are flagged when a mutation is targeted (todo 08).
+- Errors: `INVALID_REQUEST` (malformed selector for an explicit `selector_kind`, blank selector, unknown `selector_kind`, `selector_kind` without selector), `INVALID_DETAIL_LEVEL`, `MUTATION_NOT_FOUND`. No match returns an empty set (`SELECTOR_UNRESOLVED` is not raised here).
+- Projection: CLI `knx-agent setup list-components --session <session_label> [--session-root <dir>] [--query <text>] [--selector-kind <kind>] [--detail-level ...] [--mutation <name>] [--log-level <level>]`; SDK `client.list_components(...)`; MCP `list_components`.
 
 ### 7. `describe_component` (UC 1.3)
 - Purpose: configuration and topology of components selected by name, instance path, address or ETS id.
-- Request: `component_selector`, `selector_kind?`, `detail_level?`, `mutation_name?`.
-- Response: `components` (set; one element when unambiguous), per component: `identity`, `topology`, `component_parameters`, plus at `FULL`: `group_addresses`, `communication_objects`, `purpose_annotation` when available; `ambiguous`, envelope.
-- Evidence/limits: `KNXPROJ` (and `VENDOR_DOCUMENTATION` at FULL if enriched data is available); mutated parameter values are marked.
-- Errors: `SELECTOR_UNRESOLVED`.
-- Projection: CLI `knx-agent setup describe-component --session <session_label> --component <selector> [--selector-kind <kind>] [--detail-level ...] [--mutation <name>]`; SDK `client.describe_component(...)`; MCP `describe_component`.
+- Request: `session_label`, `component_selector` (required), `selector_kind?`, `detail_level?`, `mutation_name?`.
+- Response: `components` (set; one element when unambiguous; same component views as `list_components`): `identity` and `derived` at every level, `topology` and `component_parameters` from `MEDIUM`, at `FULL` also `group_addresses`, `communication_objects`, `product`, `application`, `engineering_metadata`, and `purpose_annotation` when available (todo 14); `match_count`, `ambiguous` (more than one component), envelope. Exact fields per level: section "Component inspection (story 05)".
+- Evidence/limits: `KNXPROJ` only in this story (`VENDOR_DOCUMENTATION` arrives with todo 09); mutated parameter values are marked (todo 08).
+- Errors: `SELECTOR_UNRESOLVED` (nothing matches), `INVALID_REQUEST` (missing or malformed selector, selector kind does not fit), `INVALID_DETAIL_LEVEL`, `MUTATION_NOT_FOUND`.
+- Projection: CLI `knx-agent setup describe-component --session <session_label> [--session-root <dir>] --component <selector> [--selector-kind <kind>] [--detail-level ...] [--mutation <name>] [--log-level <level>]`; SDK `client.describe_component(...)`; MCP `describe_component`.
 
 ### 8. `summarize_topology` (UC 1.2)
 - Purpose: summarize areas, lines, rooms if derivable, and component distribution.
-- Request: `detail_level?`, `mutation_name?`.
-- Response: `topology_summary`, `component_counts`, `purpose_summary` when annotations are available, envelope.
-- Evidence/limits: `KNXPROJ`; rooms only where the project encodes them.
-- Errors: common only.
-- Projection: CLI `knx-agent setup summarize-topology --session <session_label> [--detail-level ...] [--mutation <name>]`; SDK `client.summarize_topology(...)`; MCP `summarize_topology`.
+- Request: `session_label`, `detail_level?`, `mutation_name?`.
+- Response: `topology_summary` (counts; from `MEDIUM` per area, line and location; at `FULL` with component lists), `component_counts` (total, placed, unplaced, distribution by `component_type`), `purpose_summary` when annotations are available (todo 14; absent before), envelope. Structure: section "Component inspection (story 05)".
+- Evidence/limits: `KNXPROJ`; locations (rooms) only where the project encodes them (limitation note otherwise).
+- Errors: common only (`INVALID_DETAIL_LEVEL`, `MUTATION_NOT_FOUND`).
+- Projection: CLI `knx-agent setup summarize-topology --session <session_label> [--session-root <dir>] [--detail-level ...] [--mutation <name>] [--log-level <level>]`; SDK `client.summarize_topology(...)`; MCP `summarize_topology`.
 
 ### 9. `trace_group_flow` (UC 2.3)
 - Purpose: participants and propagation path of a group address or communication object; also finds group addresses by name.
-- Request: `group_address_selector?`, `communication_object_ref?` (one of the two required), `mutation_name?`, `detail_level?`.
-- Response: `group_addresses` (matches, set when ambiguous), per match `participants`, `propagation_path`, `unresolved_links`, `current_value` (from current system state, may be `unknown`), envelope.
-- Evidence/limits: `KNXPROJ`, `SIMULATION_RULE` for current value; unresolved links noted.
-- Errors: `SELECTOR_UNRESOLVED`, `INVALID_REQUEST` (neither or both selectors given).
-- Projection: CLI `knx-agent setup trace-group-flow --session <session_label> [--group-address <selector> | --object-ref <ref>] [--detail-level ...] [--mutation <name>]`; SDK `client.trace_group_flow(...)`; MCP `trace_group_flow`.
+- Request: `session_label`, `group_address_selector?`, `communication_object_ref?` (exactly one of the two), `mutation_name?`, `detail_level?`.
+- Response: `group_addresses` (one flow entry per matched group address, ordered by raw address; entry structure: section "Component inspection (story 05)"), per entry `participants`, `propagation_path` (direct participants only in story 05), `unresolved_links`, `current_value` (always `unknown` until todos 06/07), `match_count`, `ambiguous` (more than one entry), envelope.
+- Evidence/limits: `KNXPROJ`; `SIMULATION_RULE` is not used before todos 06/07. Direction comes from the ETS communication object flags only; the order of the group address links is not used; no line or area routing.
+- Errors: `SELECTOR_UNRESOLVED`, `INVALID_REQUEST` (neither or both selectors given, malformed `communication_object_ref`), `INVALID_DETAIL_LEVEL`, `MUTATION_NOT_FOUND`.
+- Projection: CLI `knx-agent setup trace-group-flow --session <session_label> [--session-root <dir>] [--group-address <selector> | --object-ref <ref>] [--detail-level ...] [--mutation <name>] [--log-level <level>]`; SDK `client.trace_group_flow(...)`; MCP `trace_group_flow`.
 
 ### 10. `list_environment_inputs` (UC 2.1)
 - Purpose: list sensor-oriented environment inputs that drive the system, with current values.
@@ -548,7 +555,7 @@ Relations (source facts, listed under `source_facts.relations`):
 
 | Relation | Fields | Source |
 | --- | --- | --- |
-| `membership` | `communication_object_id`, `group_address_id`, `order` (0-based position in `Links`; the semantics of position 0 (sending address) are NOT asserted here; todo 15 must verify them before `trace_group_flow` relies on them) | `Links` attribute (space-separated `GA-<n>`, resolved to `<project id>-0_GA-<n>`) |
+| `membership` | `communication_object_id`, `group_address_id`, `order` (0-based position in `Links`; the semantics of position 0 (sending address) are NOT asserted here; story 05 does NOT rely on `order` for `trace_group_flow`; verification against ETS documentation is deferred to todo 07) | `Links` attribute (space-separated `GA-<n>`, resolved to `<project id>-0_GA-<n>`) |
 | `placed_in` | `space_id`, `component_id` | `Space/DeviceInstanceRef` |
 
 Containment is carried by the parent fields above (`area.installation_id`, `line.area_id`, `component.line_id`,
@@ -882,6 +889,351 @@ return the extended models unchanged. Import-direction test stays green.
   unlinked objects). The test asserts this and that the gap equals the number of unlinked objects.
 - T11: no code change was needed in SDK, CLI or MCP (they return the extended models unchanged); tests were added or
   updated in `tests/test_adapters.py`, `tests/test_sdk.py` and `tests/test_contracts.py`.
+
+## Component inspection (story 05)
+
+Realises capabilities 6 to 9 (`list_components`, `describe_component`, `summarize_topology`, `trace_group_flow`)
+on SDK, CLI and MCP over the persisted project graph. Decisions of 2026-10-24: the user decisions listed in the
+story (instance path, distinct detail levels, direct participants only, flag-based direction, error behaviour);
+"architect" marks decisions taken while writing this section (to be confirmed at the review gate). No new
+capability beyond the four; error codes remain proposals until the catalogue freeze. The architecture document is
+unchanged (decision recorded: section 3 already assigns the query layer to a later story that reads the persisted
+project graph; no boundary, layer or data contract changes).
+
+### Layering and module placement
+- `domain` (pure, may import `contracts`): `selectors.py` (parse, kind detection, matching), `graph_index.py`
+  (in-memory indexes built from a `ProjectGraph`), `component_view.py` (view model and level projections),
+  `topology_summary.py`, `group_flow.py`.
+- `application`: `query_service.py` (`QueryService`: session open, project refresh check, graph load, delegation to
+  the domain, envelope and error reporting); the ERROR reporting of `SessionService._report_error` moves into a
+  shared helper `application/error_reporting.py` used by both services (no behaviour change).
+- `contracts`: new enums `SelectorKind`, request and response models (below), error code constants
+  `SELECTOR_UNRESOLVED`, `MUTATION_NOT_FOUND`, `INVALID_DETAIL_LEVEL` (the three are catalogue C7 codes not yet
+  defined in code).
+- `sdk`: four new `KnxSessionClient` methods; `cli`: new `setup` command group; `adapters/mcp`: four new tools.
+  Adapters contain no business rules.
+- Per call the graph is loaded from `project-graph.json` (`graph_store.read_graph`) and indexed; nothing is cached
+  between calls (arch-a). A missing graph cannot occur after the refresh check (a missing file counts as CHANGED and is
+  re-imported); a present but unreadable or invalid graph file raises `PROJECT_PARSE_ERROR` with `details.reason`
+  `GRAPH_FILE_INVALID` (message names `reimport_system_definition` as the repair), no hidden re-import.
+
+### Order of operations (all four capabilities)
+1. `log_level` check (`INVALID_LOG_LEVEL`). 2. Session label check and `SESSION_NOT_FOUND` (story 03 rules).
+3. Project refresh check (story 04 rules; may re-import). 4. Request validation: `detail_level`
+(`INVALID_DETAIL_LEVEL`), `mutation_name`, selector rules (`INVALID_REQUEST`). 5. Graph load and index.
+6. Query. 7. Envelope. Any `KnxAgentError` is reported as ERROR (Python logger and, since the session exists, the
+log book) and re-raised; the refresh check precedes validation so that a changed project is re-imported even when
+the request is then rejected.
+`detail_level` and `selector_kind` strings are accepted case-insensitively (SDK, CLI, MCP) and normalised.
+`mutation_name`: omitted, empty or `default` targets the default setup; every other value raises
+`MUTATION_NOT_FOUND` (message: mutations arrive with todo 08; `details.mutation_name`). The envelope `setup` is `default`.
+
+### Logging and the refresh check for read-only calls
+The four capabilities write NO log book entry of their own (user decision), at any `log_level`. Only the refresh
+check writes entries, with `capability` set to the calling capability (rows of the story 03/04 log point tables:
+DEBUG unchanged, INFO changed with automatic re-import, DEBUG per import warning, ERROR failures). The envelope
+`log_book_entry_id` is the id of the refresh-check entry written by this call, else `null`. Every failure, including
+`SELECTOR_UNRESOLVED`, `INVALID_REQUEST`, `INVALID_DETAIL_LEVEL` and `MUTATION_NOT_FOUND`, is an ERROR entry
+(written regardless of `log_level`) plus a Python `logging` record, exactly as for story 03 errors. `log_level` is a
+per-call SDK parameter and CLI option `--log-level`, a startup argument for MCP, like the session capabilities.
+
+### Selector grammar: component selector
+`component_selector` is a string; surrounding whitespace is stripped; inner characters are kept. A value that is
+empty after stripping is `INVALID_REQUEST` (`details.reason` `SELECTOR_BLANK`); "no selector" is only `None` (or an
+omitted option) and means a broad listing in `list_components` and is `INVALID_REQUEST` (`SELECTOR_MISSING`) in
+`describe_component`. `selector_kind` given without a selector in `list_components` is `INVALID_REQUEST`
+(`SELECTOR_KIND_WITHOUT_SELECTOR`); an unknown `selector_kind` value is `INVALID_REQUEST` (`SELECTOR_KIND_UNKNOWN`,
+`details.allowed`). Matching is on the graph's component nodes.
+
+Syntax tests (pure functions, case rules as stated):
+| Kind | Syntax test of the value | Match rule |
+| --- | --- | --- |
+| `INDIVIDUAL_ADDRESS` | regex `^\d{1,2}\.\d{1,2}\.\d{1,3}$` AND area 0-15, line 0-15, device 0-255 (for example `1.1.5`) | exact: equals the component's `individual_address` text (normalised without leading zeros; `01.1.5` is accepted and equals `1.1.5`) |
+| `ETS_ID` | regex `^P-[0-9A-Fa-f]+-\d+_DI-\d+(~\d+)?$` (for example `P-051B-0_DI-6`) | exact, case-sensitive: equals the component node `id` |
+| `INSTANCE_PATH` | contains at least one non-empty segment after splitting at `/` and stripping segments | partial, case-insensitive, segment based (rules below) |
+| `NAME` | non-blank | partial: `casefold()` of the query is a substring of the `casefold()` of the component `name` (components without a name never match by name) |
+
+Kind detection for `selector_kind` = `ANY` (default): NAME is ALWAYS evaluated; in addition INDIVIDUAL_ADDRESS when
+the value passes its syntax test, ETS_ID when it passes its, INSTANCE_PATH when the value contains `/` (architect:
+a plain word is a name query, not a location query; to list the components of a location use a path with `/`,
+see the trailing slash rule). The result is the UNION of the matches (each component once); every match carries
+`match_kinds` (sorted subset of `NAME`, `INSTANCE_PATH`, `INDIVIDUAL_ADDRESS`, `ETS_ID`) naming the kinds that
+matched it. A value that merely looks like an address but is out of range (`1.1.300`) fails the syntax test and is
+therefore only a NAME query under ANY.
+Explicit `selector_kind` other than ANY evaluates ONLY that kind. A value that does not pass the syntax test of the
+explicit kind is `INVALID_REQUEST` (`details.reason` `SELECTOR_KIND_MISMATCH`, `details.selector_kind`,
+`details.value`), for example `INDIVIDUAL_ADDRESS` with `1.1`, `ETS_ID` with `DI-6`, `INSTANCE_PATH` with `/`.
+`NAME` accepts any non-blank value (a name may contain any character).
+
+### ANY overlap rules (binding)
+- `match_kinds` is a SET (serialised as a sorted list without duplicates) of the kinds that matched that component.
+- Under `ANY` the result is de-duplicated by component node id: a component matched by several kinds appears once and
+  its `match_kinds` is the merged set. `match_count` counts components, not matches.
+- NAME matching always applies under `ANY`, whatever the value looks like. Consequently a component whose NAME merely
+  looks like an address (for example a component named `1.1.5`, or named like an ETS id) still matches by NAME, and when
+  the same value is also its individual address it matches with `match_kinds` `[INDIVIDUAL_ADDRESS, NAME]`.
+- Which syntaxes can overlap: the INDIVIDUAL_ADDRESS syntax (`N.N.N`, no `/`, no `P-` prefix) and the ETS_ID syntax
+  (`P-...-DI-n`) are disjoint and never both fit one value. A value containing `/` can fit INSTANCE_PATH and NAME
+  (a name containing `/`); it cannot fit INDIVIDUAL_ADDRESS or ETS_ID. A value without `/` fits NAME plus at most one
+  of INDIVIDUAL_ADDRESS and ETS_ID. INSTANCE_PATH is never evaluated for a value without `/` under `ANY`.
+- Ordering of a mixed result is the normal component order (area, line, device number, then id); it does not depend on
+  the matching kind.
+- Explicit kinds never overlap: only the named kind is evaluated and `match_kinds` holds that single kind.
+
+### Error taxonomy (query capabilities)
+| Situation | Code | `details` |
+| --- | --- | --- |
+| Selector syntactically fine but nothing matches in `describe_component`, `trace_group_flow` (unknown address, name or object ref) | `SELECTOR_UNRESOLVED` | `selector`, `selector_kind`, `evaluated_kinds` (flow: `address_raw` for an exact address) |
+| `list_components` finds nothing | no error | empty `matches`, `match_count` 0 |
+| `detail_level` not SUMMARY, MEDIUM or FULL (any case) | `INVALID_DETAIL_LEVEL` | `allowed` |
+| `mutation_name` omitted, empty or `default` | no error | default setup is used |
+| `mutation_name` any other value (until todo 08) | `MUTATION_NOT_FOUND` | `mutation_name` |
+| Stored `project-graph.json` unreadable or invalid | `PROJECT_PARSE_ERROR` | `reason` `GRAPH_FILE_INVALID`, `path` |
+| Malformed, blank, missing, conflicting or non-fitting request values (selector, selector kind, group address selector / object ref combination) | `INVALID_REQUEST` | `reason` one of `SELECTOR_BLANK`, `SELECTOR_MISSING`, `SELECTOR_CONFLICT`, `SELECTOR_KIND_UNKNOWN`, `SELECTOR_KIND_MISMATCH`, `SELECTOR_KIND_WITHOUT_SELECTOR` |
+| Session label / project file problems | story 03 and 04 codes (`SESSION_NOT_FOUND`, `PROJECT_FILE_UNREADABLE`, `PROJECT_PARSE_ERROR`) | as there |
+Rule: a dedicated top-level code is used where the catalogue defines one for the situation (unresolved selector, setup,
+detail level, stored graph); `INVALID_REQUEST` with `details.reason` is the code for every other bad request value.
+`mutation_name` `default` means the default setup (the only setup that exists until todo 08); every other value,
+including a name that will later be a valid mutation, is `MUTATION_NOT_FOUND` until todo 08 delivers mutations.
+
+### Instance path construction
+- A component's location is the space it is placed in (`placed_in`). Its location path is the list of space names
+  from the root space (no `parent_id`) down to that space, found by following `parent_id` upwards; the instance
+  path segments are those names plus the component's own segment; the string `instance_path` joins the segments with
+  `/` without leading or trailing `/` (for example `Haus/EG/Wohnzimmer/Taster 1`; deeper trees give longer paths, the
+  sample has up to 4 location levels). Nested locations of any depth are supported; a parent cycle (corrupt graph)
+  stops at the first repeated space.
+- Segment text: the node `name`; an empty or missing space name uses the space's ETS id; an empty or missing
+  component name uses its `individual_address` (architect), falling back to its ETS id. Names that contain `/` are
+  kept verbatim in the string; matching works on the segment LIST, never on the joined string, so such names do not
+  create extra segments.
+- A component not placed in any location has `instance_path` `null` and an empty `location_path`. A component placed in
+  several spaces (not in the sample) has one path per placement, sorted by space id: `instance_path` is the first,
+  `other_instance_paths` lists the rest (empty list when there is one); matching tests all of them.
+- Path matching (`INSTANCE_PATH`, and the `/` branch of ANY): the query is split at `/`, segments stripped and empty
+  segments dropped. A leading `/` anchors the first query segment at the root segment; a trailing `/` makes the query a
+  LOCATION query: the segments must match inside the location part of the path (all segments except the component's
+  own), so `EG/Wohnzimmer/` lists every component placed in that room; without a trailing `/` the segments may also
+  reach the component segment. Matching rule: the query segments match CONSECUTIVE path segments, each query segment
+  being a case-insensitive substring of the corresponding path segment; without a leading `/` the run may start at any
+  position. Child locations are NOT included implicitly beyond the substring rule on the path (a component in
+  `Haus/EG/Wohnzimmer/Nische` is matched by `Wohnzimmer/` because `Wohnzimmer` is one of its location segments).
+
+### Component view model and detail levels
+One internal `ComponentView` (domain) holds all fields; the level is a projection (impl-b). The JSON of a level
+contains exactly the fields below: fields of a higher level are ABSENT (not `null`); a field that belongs to the level
+but has no value is `null` (or an empty list). `purpose_annotation` and `purpose_summary` are not declared at all until
+todo 14. Source facts and derived facts are separated: `identity`, `topology`, `component_parameters`, `product`,
+`application`, `engineering_metadata`, `group_addresses` and `communication_objects` are source facts (the property
+`fact_origin` `PROJECT`/`CATALOG` is not repeated per field); `derived` holds the derived facts and is labelled by
+its name and `fact_kind` `DERIVED`.
+
+| Block | SUMMARY | MEDIUM (default) | FULL |
+| --- | --- | --- | --- |
+| `identity` | `name` (null if empty), `individual_address`, `ets_id` (node id), `instance_path`, `other_instance_paths` | same | same |
+| `derived` | `fact_kind` `DERIVED`, `component_type` | same | plus `typing_rule_id`, `typing_basis` (the stored `ComponentTypingBasis`) |
+| `match_kinds` | present only when a selector was given | same | same |
+| `topology` | absent | `area` and `line` (each `{ets_id, address (int), name}`; `line` also `address_text` like `1.1`; null if the component has none), `location_path` (list of `{ets_id, name, space_type}` root to leaf; empty when unplaced) | same |
+| `component_parameters` | absent | list of `{parameter_ref_id, name, text, value, definition_resolved}`, `value` = raw ETS string; ordered by (`name` or `text` or `parameter_ref_id`, casefolded; then `parameter_ref_id`) | same plus `parameter_type_id` |
+| `group_addresses` | absent | absent | the component's distinct group addresses `{ets_id, address, name, datapoint_type}` ordered by `address_raw` |
+| `communication_objects` | absent | absent | list ordered by (`object_number`, node id): `{ets_id, ref_id, object_number, label, function_text, text, instance_text, description, object_size, flags {read, write, communication, transmit, update, read_on_init} (`Enabled`/`Disabled`/null), datapoint_types, definition_resolved, group_addresses [{ets_id, address, name, datapoint_type, link_order}] ordered by (link_order, address_raw)}`; `label` = first non-empty of `instance_text`, `text`, `function_text` |
+| `product` | absent | absent | `{product_ref_id, product_text, order_number, manufacturer_id, hardware2program_ref_id}` |
+| `application` | absent | absent | `{application_program_id, application_number, application_version, mask_version, name, source_loaded}` (the last five null when the program node is missing) |
+| `engineering_metadata` | absent | absent | `{description, comment, serial_number, medium_type_ref, has_ip_config, last_modified, last_download, load_state}` |
+
+The `ets_id` of a communication object is its node id (`<component id>/co/<ref id>`), the value accepted by
+`communication_object_ref`. `link_order` is the stored `membership.order` and is informational only.
+Responses must serialise to the same JSON on SDK (`model_dump_json`), CLI and MCP; the level-dependent shape is
+achieved with one contract class per level (`ComponentSummaryView`, `ComponentMediumView`, `ComponentFullView`, each
+extending the previous) and `SerializeAsAny` in the response models; a test compares all three surfaces.
+
+### Response shapes
+`list_components`: `{matches: [ComponentView], match_count, ambiguous, envelope}`.
+`describe_component`: `{components: [ComponentView], match_count, ambiguous, envelope}`.
+`ambiguous` = a selector was given AND `match_count` > 1. Envelope: `setup` `default`, `evidence_sources`
+`[{kind: KNXPROJ, reference: <absolute .knxproj path>}]`, `limitation_notes` (below), `log_book_entry_id`,
+`detail_level` (the echoed level; there is no second top-level `detail_level`).
+Ordering (deterministic, all lists): components by (area address, line address, device number) numerically parsed from
+`individual_address` with unparsable or missing last, then node id; group addresses by `address_raw` then id;
+participants by the component order, then `object_number`, then object id; locations depth-first with siblings by
+casefolded name then id; areas and lines by address. There is no result limit or paging in this story; a `FULL`
+listing of a whole project is large (all communication objects and parameters), which is a documented limitation, not
+an error.
+
+### `summarize_topology` structure
+Response `{topology_summary, component_counts, envelope}` (`purpose_summary` absent until todo 14).
+- `component_counts` (all levels): `{total, placed, unplaced, by_component_type: {<type>: n}}` (types with 0 omitted,
+  keys sorted).
+- `topology_summary` SUMMARY: `{counts: {areas, lines, locations}, locations_by_type: {<space_type>: n}}` (spaces
+  count as locations; the installation node is not a location).
+- MEDIUM adds `areas`: `[{ets_id, address, name, component_count, lines: [{ets_id, address, address_text, name,
+  component_count}]}]` (components counted by their `line_id`; a component without a line is counted in
+  `unassigned_to_line` at `topology_summary`), `locations`: depth-first flat list of `{ets_id, name, space_type,
+  path (string of names root to here, joined by `/`), depth (root 1), component_count (placed directly here),
+  component_count_total (here and in all descendants)}`, and `unplaced_component_count`.
+- FULL adds, to every line and every location entry, `components`: `[{ets_id, name, individual_address}]` in component
+  order (locations: only the directly placed ones), and `unplaced_components` (same item shape).
+- Limitation notes: no location in the project; unplaced components exist; components without a line.
+
+### `trace_group_flow`
+Request rules: exactly one of `group_address_selector` and `communication_object_ref` (both or none:
+`INVALID_REQUEST`, `details.reason` `SELECTOR_CONFLICT` or `SELECTOR_MISSING`; a blank value counts as given and is
+`SELECTOR_BLANK`).
+- Group address selector: stripped; a value that is a VALID ADDRESS FORM is matched exactly by `address_raw`, otherwise
+  the value is a partial name (case-insensitive substring of the group address `name`; unnamed addresses never
+  match). Valid forms: the 3-level form `a/b/c` (a 0-31, b 0-7, c 0-255) always; the project style of the
+  installation additionally: TwoLevel `a/b` (a 0-31, b 0-2047), Free a plain integer 0-65535. In a ThreeLevel project
+  `5/12` and a plain integer are therefore names. A value of address form that is out of range is a name query. An
+  exact address that does not exist is `SELECTOR_UNRESOLVED` (`details.address_raw`); a name matching nothing is
+  `SELECTOR_UNRESOLVED`. An exact address matches one group address; a partial name may match several.
+- `communication_object_ref`: the exact communication object node id (`<component id>/co/<ref id>`, as returned in
+  `communication_objects[].ets_id` and `participants[].communication_object.ets_id`). A value without `/co/` is
+  `INVALID_REQUEST` (`SELECTOR_KIND_MISMATCH`); a well-formed unknown id is `SELECTOR_UNRESOLVED`. The result is one
+  flow entry per group address the object is linked to (usually one); an object without links gives an empty
+  `group_addresses` list, `match_count` 0 and a limitation note (not an error).
+Response `{group_addresses: [FlowEntry], match_count, ambiguous, envelope}`; `ambiguous` = `match_count` > 1.
+
+`FlowEntry` fields per level (absent below the level):
+| Field | SUMMARY | MEDIUM (default) | FULL |
+| --- | --- | --- | --- |
+| `group_address` | `{ets_id, address, name}` | plus `datapoint_type`, `description` | plus `address_raw`, `range_id`, `range_path` (names of the enclosing group ranges root to leaf) |
+| `participants[]` | `{component {ets_id, name, individual_address}, direction}` | `component` plus `instance_path`, `component_type`; `communication_object {ets_id, object_number, label, datapoint_types}`; `direction`, `roles` | `communication_object` plus `function_text`, `text`, `instance_text`, `description`, `object_size`, `flags` (all six), `definition_resolved`; participant plus `link_order` |
+| `propagation_path` | `{scope: "DIRECT_PARTICIPANTS", senders: [component ets_id], receivers: [component ets_id]}` | same | same |
+| `unresolved_links[]` | `{code, communication_object_id, component_id}` | plus `message`, `location` | same |
+| `current_value` | `"unknown"` | same | same |
+
+- Participants: every communication object with a `membership` to the group address, ordered as stated above.
+  The same component may appear several times (once per linked object).
+- Direction rule (user decision: ETS flags only; the link order is NOT used): `roles` is the sorted subset of
+  `TRANSMITS` (transmit flag `Enabled`), `ACCEPTS_WRITE` (write `Enabled`), `ACCEPTS_UPDATE` (update `Enabled`),
+  `ANSWERS_READ` (read `Enabled`). `direction`: `SENDER` when TRANSMITS only among TRANSMITS/ACCEPTS_WRITE/
+  ACCEPTS_UPDATE; `RECEIVER` when ACCEPTS_WRITE or ACCEPTS_UPDATE and not TRANSMITS; `SENDER_RECEIVER` when TRANSMITS
+  and (ACCEPTS_WRITE or ACCEPTS_UPDATE); `UNDETERMINED` otherwise (including objects whose flags are `null` because the
+  definition is unresolved, and objects with only ANSWERS_READ). The communication flag is shown at FULL but not
+  evaluated. `senders` of `propagation_path` = components with `SENDER` or `SENDER_RECEIVER`, `receivers` = components
+  with `RECEIVER` or `SENDER_RECEIVER`, each component once, in component order.
+- `unresolved_links`: for the linked objects of the entry, (a) every persisted import warning with code
+  `GROUP_ADDRESS_LINK_UNRESOLVED` or `COMOBJECT_DEFINITION_UNRESOLVED` whose `location` names that object's node
+  id after `#` (`code`, `message`, `location` copied from the warning), and (b) an object with `definition_resolved`
+  false even if no warning matched. The warnings are read from `project-graph.json` (all of them, not only the 200 in
+  the session state). Order: by communication object id, then code.
+- `current_value` is the string `unknown`; no simulation exists before todos 06/07 and no `SIMULATION_RULE` evidence
+  is added.
+
+### Limitation notes (exact sentences; tests match on the leading words)
+- `list_components`/`describe_component`, always: "Component type is a derived fact (coarse rule-based typing), not a project fact."
+- MEDIUM/FULL, when any returned component has a parameter: "Parameter values are raw ETS strings; they are not interpreted through parameter types."
+- when a returned component has `definition_resolved` false parameters or objects (MEDIUM/FULL): "<n> parameters and <m> communication objects of the returned components have unresolved definitions (see the import warnings)."
+- when a returned component is unplaced: "<n> returned components are not placed in a location and have no instance_path."
+- when the project has no location at all: "The project encodes no locations; instance_path is absent for all components."
+- `summarize_topology`: the unplaced, no-location and unassigned-line notes above (adapted wording).
+- `trace_group_flow`, always: "Direction is derived from the ETS communication object flags only; the order of group address links is not used." and "Only direct participants are listed; line and area routing is not evaluated." and "current_value is unknown; no simulation exists yet."; plus the object-without-link note: "The communication object is not linked to any group address."
+- Import warnings are NOT repeated as notes (they are in `describe_session`).
+
+### Contracts (names; fields as above)
+`SelectorKind` (StrEnum `ANY`, `NAME`, `INSTANCE_PATH`, `INDIVIDUAL_ADDRESS`, `ETS_ID`); requests `ListComponentsRequest`,
+`DescribeComponentRequest`, `SummarizeTopologyRequest`, `TraceGroupFlowRequest`; responses `ListComponentsResponse`,
+`DescribeComponentResponse`, `SummarizeTopologyResponse`, `TraceGroupFlowResponse`; views `ComponentSummaryView`,
+`ComponentMediumView`, `ComponentFullView`, flow models per level; all `extra="forbid"`. Error constants in
+`contracts/errors.py`. `details.reason` values for `INVALID_REQUEST`: `SELECTOR_BLANK`, `SELECTOR_MISSING`,
+`SELECTOR_CONFLICT`, `SELECTOR_KIND_UNKNOWN`, `SELECTOR_KIND_MISMATCH`, `SELECTOR_KIND_WITHOUT_SELECTOR`.
+`SELECTOR_UNRESOLVED` details: `selector` (the stripped value), `selector_kind`, `evaluated_kinds`.
+
+### Surface projections
+| Surface | list_components | describe_component | summarize_topology | trace_group_flow |
+| --- | --- | --- | --- | --- |
+| CLI | `knx-agent setup list-components --session S [--query Q] [--selector-kind K] [--detail-level L] [--mutation M] [--session-root D] [--log-level X]` | `knx-agent setup describe-component --session S --component C [--selector-kind K] [--detail-level L] [--mutation M] [--session-root D] [--log-level X]` | `knx-agent setup summarize-topology --session S [--detail-level L] [--mutation M] [--session-root D] [--log-level X]` | `knx-agent setup trace-group-flow --session S (--group-address G \| --object-ref R) [--detail-level L] [--mutation M] [--session-root D] [--log-level X]` |
+| MCP arguments | `session_label`, `component_selector?`, `selector_kind?`, `detail_level?`, `mutation_name?` | `session_label`, `component_selector`, `selector_kind?`, `detail_level?`, `mutation_name?` | `session_label`, `detail_level?`, `mutation_name?` | `session_label`, `group_address_selector?`, `communication_object_ref?`, `detail_level?`, `mutation_name?` |
+| SDK | `client.list_components(session_label, component_selector=None, selector_kind=None, detail_level=None, mutation_name=None, log_level=None)` and analogously for the others |
+
+CLI rules: all options are plain strings validated by the core (so a bad `--detail-level` yields the core error
+`INVALID_DETAIL_LEVEL`, not a typer usage error); `--component` is required for `describe-component`; for
+`trace-group-flow` the exactly-one rule is enforced by the core (`INVALID_REQUEST`), not by typer; output is the
+response model as one JSON line on stdout; errors as for the session commands (Python ERROR line on stderr, then
+`ErrorInfo` JSON, exit code 1). MCP: the `log_level` is the server startup argument; argument types are `str`
+(not enums) so invalid values reach the core and return the catalogue error code.
+
+### Known limitations (story 05)
+- No paging or result limit: a `FULL` listing of a whole project (all communication objects and parameters of all
+  components) is large; callers narrow the selector or use a lower detail level.
+- A changed project is re-imported by the refresh check even when the request is then rejected (refresh precedes
+  request validation), so a rejected call can still write refresh-check log entries and rewrite the graph.
+- Parameter values are raw ETS strings; component type is coarse and derived; direction comes from flags only, the
+  link order is not used; no routing; `current_value` is always `unknown`.
+- Components with unresolved definitions show null flags and unnamed parameters (`definition_resolved` false).
+
+### Evidence, limits and non-goals
+`KNXPROJ` only. Not in scope: purpose annotation (todo 14), simulated or observed values (todos 06/07), mutations
+(todo 08), line and area routing, scene semantics, verification that the first group address link is the sending
+address (todo 07), bus traces (todo 05).
+
+### Implementation notes (story 05, interpretations recorded by the implementation)
+
+Additions and interpretations only; no rule above was changed. Items marked (spec change request) are candidates for
+the architect at the review gate.
+
+- Layering: the domain modules import `contracts` (view classes, `KnxAgentError`), as the layer model above states;
+  `tests/test_import_direction.py` therefore allows `domain -> contracts` (it was `domain -> {}` before). `contracts`
+  still imports nothing from `knx_agent`. `application/session_access.py` (`SessionAccess`: session root argument,
+  default log level, the one `ProjectRefreshGuard`, session opening) is the construction shared by `SessionService` and
+  `QueryService`; the extracted `report_error` keeps the logger name `knx_agent.application.session_service`.
+- Contracts: the per-level classes live in `contracts/query_models.py`. The level-dependent response fields are
+  `SerializeAsAny[Full | Medium | Summary]` unions; level-specific fields of the MEDIUM and FULL classes are REQUIRED
+  (nullable, no defaults) and all classes forbid extra keys, so `model_validate_json(model_dump_json())` returns the
+  class of the level (round trip tested for every capability and level). `match_kinds` uses `exclude_if` (absent when
+  no selector was given). The request models carry plain strings.
+- Validation split: `QueryService` runs the cheap request rules (detail level, mutation name, selector kind parsing,
+  blank / missing / conflict / kind-mismatch rules) BEFORE loading the graph through `validate_*_request` functions of
+  the domain; the domain query functions repeat the same checks (idempotent), so they are also safe to call directly.
+  `selector_kind` "given" is `is not None` (an explicit `ANY` without a selector is also
+  `SELECTOR_KIND_WITHOUT_SELECTOR`).
+- `mutation_name` is compared exactly (`default`, case-sensitive; `None` and the empty string also mean the default
+  setup); `details.mutation_name` repeats the value.
+- Instance paths: a placement whose space or component is not in the graph is ignored (the component counts as
+  unplaced). `evaluated_kinds` and `match_kinds` are sorted alphabetically (`ETS_ID`, `INDIVIDUAL_ADDRESS`,
+  `INSTANCE_PATH`, `NAME`). An explicit `INSTANCE_PATH` query without a trailing `/` and a single segment matches any
+  path segment, including location segments (`living` finds every component in the room); under `ANY` the same word is
+  a name query (rule: `INSTANCE_PATH` only with `/`).
+- Name containing `/` (ANY overlap): matching works on the segment list, so a name `Ab/Cd` in the location `Ab` has the
+  path segments `Ab`, `Ab/Cd`; the query `b/c` matches it by NAME and by INSTANCE_PATH (merged `[INSTANCE_PATH, NAME]`),
+  while the query `Ab/Cd` matches the same component by both kinds as well. The fixture
+  `selector_overlap_cases.yaml` records these cases.
+- Group address forms: the 3-level regexp accepts one or two digits for main and middle and up to three for sub, the
+  two-level form up to four digits for sub, the free form up to five digits; leading zeros are accepted; the range
+  checks follow the spec. An installation without a recorded style behaves like ThreeLevel.
+- `SELECTOR_UNRESOLVED` details of `trace_group_flow`: `selector_kind` is `GROUP_ADDRESS` (`evaluated_kinds`
+  `["ADDRESS"]` with `address_raw`, or `["NAME"]`) or `COMMUNICATION_OBJECT_REF` (`evaluated_kinds`
+  `["COMMUNICATION_OBJECT_REF"]`).
+- Flow participants whose communication object or owning component is missing from the graph are skipped. An
+  unresolved link that has no persisted warning (object with `definition_resolved` false) is reported as
+  `COMOBJECT_DEFINITION_UNRESOLVED` with the message "The definition of the communication object could not be
+  resolved; its flags are unknown." and the location `<source_part>#<object id>`.
+- Limitation notes: for `list_components` / `describe_component` the "not placed" note and the "no locations" note are
+  both emitted when the project has no location (they are independent rules); the parameter and unresolved-definition
+  notes apply at MEDIUM and FULL, also for the parameters / objects the MEDIUM view does not show. The topology notes
+  read "The project encodes no locations; the topology summary has no location entries.", "<n> components are not
+  placed in a location." and "<n> components are not assigned to a line."
+- `summarize_topology`: a component with a `line_id` that does not name a line counts as unassigned to a line; lines
+  without a known area are not listed under any area; a component placed in several locations counts once in each
+  location's direct count and once in every `component_count_total` (sets, not sums); a parent cycle in the location
+  tree makes the lowest id of the cycle a root. FULL additionally returns `unassigned_components` next to
+  `unplaced_components` (addition; (spec change request) if the architect wants it removed).
+- MCP error text (additive, (spec change request) to document in "Surface projections"): the `ValueError` message is
+  `CODE: message` followed by a second line with the `ErrorInfo` JSON, so that `details.reason` is visible on MCP and
+  identical to the CLI error JSON (the previous text was only `CODE: message`).
+- Existing tests that had to change: `test_project_graph.py` (the reason set gains `GRAPH_FILE_INVALID`),
+  `test_adapters.py` (seven tools are registered), `test_import_direction.py` (domain may import contracts).
+- Parity tests install a factory graph into a session by writing `project-graph.json` (the project file is unchanged, so
+  the refresh check does not re-import); the SDK / CLI / MCP comparison therefore also covers the ANY overlap fixtures.
+- Measurements on the sample (macOS, Python 3.12, one call = refresh check with fingerprint, graph load of the 3.2 MB
+  file, index, query, response, best of three): every call takes 0.024 to 0.035 s at every level. Response sizes:
+  `list_components` of all 28 components 8 KB (SUMMARY), 523 KB (MEDIUM), 1.25 MB (FULL); `describe_component` of one
+  component 0.7, 21 and 83 KB; `summarize_topology` 0.6, 4.8 and 10.6 KB; `trace_group_flow` by the one-letter name
+  `a` (many matches) 255 KB, 484 KB and 726 KB. The index build is 3 ms and 695 exact traces at FULL take 10 ms in
+  process. The 30 s bound per call is far from being approached.
+- Sample facts confirmed: 28 components (26 placed), 21 locations with a depth of 4, 3132 parameters over all
+  components (MEDIUM), 692 communication objects (FULL), 12 distinct application programs, 695 group addresses with 677
+  participants over all of them; all 28 components are found exactly by individual address and by ETS id.
 
 ## Traceability: use case to capability
 

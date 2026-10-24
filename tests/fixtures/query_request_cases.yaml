@@ -1,0 +1,24 @@
+# Data-driven cases for detail_level and selector_kind parsing (story 05, T1). User-editable.
+# value: null means "not given". expected is the normalised value; error is the code, reason the details.reason.
+
+detail_levels:
+  - {id: default_is_medium, value: null, expected: MEDIUM}
+  - {id: summary_upper, value: SUMMARY, expected: SUMMARY}
+  - {id: summary_lower, value: summary, expected: SUMMARY}
+  - {id: medium_mixed, value: Medium, expected: MEDIUM}
+  - {id: full_lower, value: full, expected: FULL}
+  - {id: unknown_word, value: DETAILED, error: INVALID_DETAIL_LEVEL}
+  - {id: empty_string, value: "", error: INVALID_DETAIL_LEVEL}
+  - {id: with_space, value: " FULL", error: INVALID_DETAIL_LEVEL}
+  - {id: number, value: 3, error: INVALID_DETAIL_LEVEL}
+
+selector_kinds:
+  - {id: default_is_any, value: null, expected: ANY}
+  - {id: any_upper, value: ANY, expected: ANY}
+  - {id: name_lower, value: name, expected: NAME}
+  - {id: instance_path_mixed, value: Instance_Path, expected: INSTANCE_PATH}
+  - {id: individual_address, value: individual_address, expected: INDIVIDUAL_ADDRESS}
+  - {id: ets_id, value: ETS_ID, expected: ETS_ID}
+  - {id: unknown_word, value: ROOM, error: INVALID_REQUEST, reason: SELECTOR_KIND_UNKNOWN}
+  - {id: empty_string, value: "", error: INVALID_REQUEST, reason: SELECTOR_KIND_UNKNOWN}
+  - {id: group_address_is_not_a_component_kind, value: GROUP_ADDRESS, error: INVALID_REQUEST, reason: SELECTOR_KIND_UNKNOWN}

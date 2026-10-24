@@ -30,4 +30,13 @@ the project refresh check, and the real import behind `create_session`, `reimpor
 this note defines nothing. The query capabilities are todo 15. Task plan:
 `development/backlog/active/04-knxproj-import-and-project-graph-task-plan.yaml`.
 
+## Slice 3 realisation note (story 05)
+
+Slice 3 (component inspection) is realised by story 05: a `QueryService` in the application layer over the
+persisted project graph, pure domain modules for selectors, component views, topology summary and group flow, and
+the capabilities `list_components`, `describe_component`, `summarize_topology` and `trace_group_flow` on SDK, CLI
+(`knx-agent setup ...`) and MCP. Everything is specified only in
+`docs/implementation/003-proposed-capability-apis.md` (section "Component inspection (story 05)"); this note
+defines nothing. Task plan: `development/backlog/active/05-component-inspection-capabilities-task-plan.yaml`.
+
 Related: `docs/implementation/001-solution-concept.md`, `docs/architecture/001-knx-investigation-platform.md`.

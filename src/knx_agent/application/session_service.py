@@ -6,19 +6,16 @@ ERROR to the standard logger 'knx_agent.*' and, when a session exists, to the se
 
 from __future__ import annotations
 
-import logging
 import os
 from collections.abc import Sequence
 from pathlib import Path
 
 from knx_agent.contracts import (
-    ERROR_LEVEL,
     CreateSessionResponse,
     DescribeSessionResponse,
     EvidenceKind,
     EvidenceSource,
     InvalidatedReference,
-    KnxAgentError,
     LogLevel,
     ProjectChange,
     ProjectImportInfo,
@@ -30,13 +27,12 @@ from knx_agent.contracts import (
 )
 from knx_agent.domain import SessionState
 
+from .error_reporting import report_error
 from .import_support import limitation_notes
-from .log_book import SessionLogBook, parse_log_level
-from .project_refresh_guard import ProjectRefreshGuard
+from .log_book import SessionLogBook
+from .session_access import SessionAccess
 from .session_lifecycle import SessionLifecycle
 from .session_paths import resolve_session_root, state_path
-
-logger = logging.getLogger(__name__)
 
 
 def _envelope(
@@ -64,31 +60,12 @@ class SessionService:
         session_root: str | os.PathLike[str] | None = None,
         log_level: LogLevel | str = LogLevel.INFO,
     ) -> None:
+        self._access = SessionAccess(session_root, log_level)
         self._root_arg = session_root
-        self._default_level = log_level
-        self.guard = ProjectRefreshGuard()
-
-    # -- error reporting -------------------------------------------------------------------
-    def _report_error(
-        self, exc: BaseException, capability: str, work_directory: Path | None, level: LogLevel
-    ) -> None:
-        code = exc.error.code if isinstance(exc, KnxAgentError) else type(exc).__name__
-        message = exc.error.message if isinstance(exc, KnxAgentError) else str(exc)
-        reason = exc.error.details.get("reason") if isinstance(exc, KnxAgentError) and exc.error.details else None
-        logger.error("%s failed: %s: %s", capability, code, message)
-        if work_directory is not None and state_path(work_directory).exists():
-            try:
-                details: dict[str, object] = {"code": code, "message": message}
-                if reason is not None:
-                    details["reason"] = reason
-                SessionLogBook(work_directory, level).write(
-                    ERROR_LEVEL, capability, "default", f"{code}: {message}", details
-                )
-            except OSError:
-                logger.exception("Could not write ERROR entry to the session log book")
+        self.guard = self._access.guard
 
     def _level(self, log_level: LogLevel | str | None) -> LogLevel:
-        return parse_log_level(self._default_level if log_level is None else log_level)
+        return self._access.level(log_level)
 
     # -- capabilities ----------------------------------------------------------------------
     def create_session(
@@ -102,7 +79,7 @@ class SessionService:
             state, work_directory, entry_id = lifecycle.create(project_path, session_label, level)
         except Exception as exc:
             # Failed create leaves no folder, so only the Python logger receives the ERROR.
-            self._report_error(exc, "create_session", None, level)
+            report_error(exc, "create_session", None, level)
             raise
         return CreateSessionResponse(
             session_label=state.session_label,
@@ -115,9 +92,7 @@ class SessionService:
         )
 
     def _open(self, session_label: object) -> tuple[Path, SessionState]:
-        lifecycle = SessionLifecycle(resolve_session_root(self._root_arg))
-        work_directory = lifecycle.work_directory(session_label)
-        return work_directory, lifecycle.load(work_directory)
+        return self._access.open(session_label)
 
     def describe_session(
         self, session_label: str, log_level: LogLevel | str | None = None
@@ -132,7 +107,7 @@ class SessionService:
                 state, work_directory, SessionLogBook(work_directory, level), "describe_session"
             )
         except Exception as exc:
-            self._report_error(exc, "describe_session", work_directory, level)
+            report_error(exc, "describe_session", work_directory, level)
             raise
         return DescribeSessionResponse(
             session_label=state.session_label,
@@ -169,7 +144,7 @@ class SessionService:
                 state, work_directory, SessionLogBook(work_directory, level)
             )
         except Exception as exc:
-            self._report_error(exc, "reimport_system_definition", work_directory, level)
+            report_error(exc, "reimport_system_definition", work_directory, level)
             raise
         return ReimportSystemDefinitionResponse(
             project_refresh_status=status,  # type: ignore[arg-type]

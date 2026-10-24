@@ -1,0 +1,14 @@
+# Logging behaviour of the successful read-only calls (story 05, T6). User-editable.
+# The four capabilities write NO log book entry of their own at any log level. Only the refresh check writes:
+# an unchanged project gives one DEBUG entry (only visible at DEBUG and FULL).
+
+calls:
+  - {id: list_all, method: list_components, args: {}}
+  - {id: list_selector, method: list_components, args: {component_selector: sensor, detail_level: FULL}}
+  - {id: describe, method: describe_component, args: {component_selector: Controller, detail_level: SUMMARY}}
+  - {id: topology, method: summarize_topology, args: {detail_level: FULL}}
+  - {id: flow_address, method: trace_group_flow, args: {group_address_selector: "0/0/1"}}
+  - {id: flow_object, method: trace_group_flow, args: {communication_object_ref: "P-0001-0_DI-1/co/O-0_R-1", detail_level: FULL}}
+
+# expected number of NEW log book entries per log level for an unchanged project
+unchanged_entries: {INFO: 0, DEBUG: 1, FULL: 1}

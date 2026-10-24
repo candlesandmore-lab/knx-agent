@@ -1,0 +1,164 @@
+# Data-driven component selector cases (story 05, T2). User-editable.
+# graphs: compact descriptions for tests/graph_factory.py. cases: selector + kind -> expected components with
+# match_kinds, or the expected error. expect lists component ETS ids in the expected order.
+#
+# base graph: five components on line 1.1 and 1.2 (areas/lines numbers are the individual address parts):
+#   P-1-0_DI-1  1.1.1  "Wall Switch"       House/EG/Living room/Wall Switch
+#   P-1-0_DI-2  1.1.2  "Dimmer Actuator"   House/EG/Living room/Dimmer Actuator
+#   P-1-0_DI-3  1.1.5  "Presence Sensor"   House/EG/Kitchen/Presence Sensor
+#   P-1-0_DI-4  1.1.6  (no name)           House/OG/Bedroom/1.1.6
+#   P-1-0_DI-5  1.2.1  "Hallway Switch"    (not placed)
+
+graphs:
+  base:
+    areas: [{id: A1, address: 1, name: Area 1}]
+    lines:
+      - {id: L1, area: A1, address: 1, name: Line 1}
+      - {id: L2, area: A1, address: 2, name: Line 2}
+    spaces:
+      - id: S1
+        type: Building
+        name: House
+        children:
+          - id: S2
+            type: Floor
+            name: EG
+            children:
+              - {id: S3, type: Room, name: Living room}
+              - {id: S4, type: Room, name: Kitchen}
+          - id: S5
+            type: Floor
+            name: OG
+            children:
+              - {id: S6, type: Room, name: Bedroom}
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: Wall Switch, in: [S3]}
+      - {id: P-1-0_DI-2, line: L1, address: 2, name: Dimmer Actuator, in: [S3]}
+      - {id: P-1-0_DI-3, line: L1, address: 5, name: Presence Sensor, in: [S4]}
+      - {id: P-1-0_DI-4, line: L1, address: 6, in: [S6]}
+      - {id: P-1-0_DI-5, line: L2, address: 1, name: Hallway Switch}
+
+  deep:
+    areas: [{id: A1, address: 1, name: Area 1}]
+    lines: [{id: L1, area: A1, address: 1, name: Line 1}]
+    spaces:
+      - id: S1
+        type: Building
+        name: Block
+        children:
+          - id: S2
+            type: Floor
+            name: Level 1
+            children:
+              - id: S3
+                type: Room
+                name: Office
+                children:
+                  - {id: S4, type: Corner, name: Desk area}
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: Lamp, in: [S4]}
+      - {id: P-1-0_DI-2, line: L1, address: 2, name: Plug, in: [S3]}
+
+  odd_names:
+    areas: [{id: A1, address: 1, name: Area 1}]
+    lines: [{id: L1, area: A1, address: 1, name: Line 1}]
+    spaces:
+      - id: S1
+        type: Building
+        name: Home
+        children:
+          - {id: S2, type: Room, name: ""}
+          - {id: S3, type: Room, name: Hall}
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: Lamp, in: [S2]}
+      - {id: P-1-0_DI-2, line: L1, address: 2, in: [S3]}
+      - {id: P-1-0_DI-3, line: L1, address: 3, name: Twice, in: [S2, S3]}
+
+  unparsable_address:
+    areas: [{id: A1, address: 1, name: Area 1}]
+    lines: [{id: L1, area: A1, address: 1, name: Line 1}]
+    components:
+      - {id: P-1-0_DI-9, line: L1, address: 9, name: Zeta}
+      - {id: P-1-0_DI-8, line: L1, address: 8, name: Eta, individual_address: null}
+      - {id: P-1-0_DI-7, line: L1, address: 7, name: Theta, individual_address: "x.y"}
+      - {id: P-1-0_DI-2, line: L1, address: 2, name: Beta}
+
+  cycle:
+    areas: [{id: A1, address: 1, name: Area 1}]
+    lines: [{id: L1, area: A1, address: 1, name: Line 1}]
+    spaces:
+      - {id: S1, type: Room, name: Alpha, parent: S2}
+      - {id: S2, type: Room, name: Beta, parent: S1}
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: Lamp, in: [S1]}
+
+cases:
+  # -- name ---------------------------------------------------------------------------------------
+  - {id: name_partial_any, graph: base, selector: switch, expect: [{id: P-1-0_DI-1, kinds: [NAME]}, {id: P-1-0_DI-5, kinds: [NAME]}]}
+  - {id: name_case_insensitive_explicit, graph: base, selector: DIMMER, kind: NAME, expect: [{id: P-1-0_DI-2, kinds: [NAME]}]}
+  - {id: name_inner_space_kept, graph: base, selector: "ll sw", kind: NAME, expect: [{id: P-1-0_DI-1, kinds: [NAME]}]}
+  - {id: name_surrounding_whitespace_stripped, graph: base, selector: "  sensor  ", expect: [{id: P-1-0_DI-3, kinds: [NAME]}]}
+  - {id: name_no_match, graph: base, selector: zzz, expect: []}
+  - {id: component_without_name_never_matches_by_name, graph: base, selector: "1.1.6", kind: NAME, expect: []}
+  - {id: name_matches_exclude_unnamed, graph: base, selector: i, kind: NAME, expect: [{id: P-1-0_DI-1, kinds: [NAME]}, {id: P-1-0_DI-2, kinds: [NAME]}, {id: P-1-0_DI-5, kinds: [NAME]}]}
+  # -- individual address ---------------------------------------------------------------------------
+  - {id: ia_exact_any, graph: base, selector: "1.1.5", expect: [{id: P-1-0_DI-3, kinds: [INDIVIDUAL_ADDRESS]}], evaluated: [INDIVIDUAL_ADDRESS, NAME]}
+  - {id: ia_exact_explicit, graph: base, selector: "1.1.5", kind: INDIVIDUAL_ADDRESS, expect: [{id: P-1-0_DI-3, kinds: [INDIVIDUAL_ADDRESS]}], evaluated: [INDIVIDUAL_ADDRESS]}
+  - {id: ia_leading_zeros_normalised, graph: base, selector: "01.01.005", expect: [{id: P-1-0_DI-3, kinds: [INDIVIDUAL_ADDRESS]}]}
+  - {id: ia_is_exact_not_prefix, graph: base, selector: "1.1.1", kind: INDIVIDUAL_ADDRESS, expect: [{id: P-1-0_DI-1, kinds: [INDIVIDUAL_ADDRESS]}]}
+  - {id: ia_valid_but_unused, graph: base, selector: "1.1.200", kind: INDIVIDUAL_ADDRESS, expect: []}
+  - {id: ia_out_of_range_any_falls_back_to_name, graph: base, selector: "1.1.300", expect: [], evaluated: [NAME]}
+  - {id: ia_out_of_range_area_any, graph: base, selector: "16.1.1", expect: [], evaluated: [NAME]}
+  - {id: ia_out_of_range_explicit, graph: base, selector: "1.1.300", kind: INDIVIDUAL_ADDRESS, error: {code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH}}
+  - {id: ia_line_out_of_range_explicit, graph: base, selector: "1.16.1", kind: INDIVIDUAL_ADDRESS, error: {code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH}}
+  - {id: ia_two_parts_explicit, graph: base, selector: "1.1", kind: INDIVIDUAL_ADDRESS, error: {code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH}}
+  - {id: ia_word_explicit, graph: base, selector: abc, kind: INDIVIDUAL_ADDRESS, error: {code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH}}
+  # -- ETS id ---------------------------------------------------------------------------------------
+  - {id: ets_id_exact_any, graph: base, selector: P-1-0_DI-3, expect: [{id: P-1-0_DI-3, kinds: [ETS_ID]}], evaluated: [ETS_ID, NAME]}
+  - {id: ets_id_exact_explicit, graph: base, selector: P-1-0_DI-3, kind: ETS_ID, expect: [{id: P-1-0_DI-3, kinds: [ETS_ID]}]}
+  - {id: ets_id_is_case_sensitive, graph: base, selector: p-1-0_di-3, kind: NAME, expect: []}
+  - {id: ets_id_lower_case_any_is_name_only, graph: base, selector: p-1-0_di-3, expect: [], evaluated: [NAME]}
+  - {id: ets_id_valid_but_unused, graph: base, selector: P-1-0_DI-99, kind: ETS_ID, expect: []}
+  - {id: ets_id_malformed_explicit, graph: base, selector: DI-3, kind: ETS_ID, error: {code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH}}
+  - {id: ets_id_lower_case_prefix_explicit, graph: base, selector: p-1-0_di-3, kind: ETS_ID, error: {code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH}}
+  # -- instance path --------------------------------------------------------------------------------
+  - {id: path_full_path_any, graph: base, selector: House/EG/Living room/Wall Switch, expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}], evaluated: [INSTANCE_PATH, NAME]}
+  - {id: path_full_path_explicit, graph: base, selector: House/EG/Living room/Wall Switch, kind: INSTANCE_PATH, expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}]}
+  - {id: path_single_segment_explicit_reaches_locations, graph: base, selector: living, kind: INSTANCE_PATH, expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}, {id: P-1-0_DI-2, kinds: [INSTANCE_PATH]}]}
+  - {id: path_single_segment_any_is_a_name_query, graph: base, selector: living, expect: [], evaluated: [NAME]}
+  - {id: path_single_segment_reaches_component_segment, graph: base, selector: dimmer, kind: INSTANCE_PATH, expect: [{id: P-1-0_DI-2, kinds: [INSTANCE_PATH]}]}
+  - {id: path_trailing_slash_lists_a_room, graph: base, selector: EG/Living room/, expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}, {id: P-1-0_DI-2, kinds: [INSTANCE_PATH]}]}
+  - {id: path_trailing_slash_lists_a_floor_with_children, graph: base, selector: EG/, expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}, {id: P-1-0_DI-2, kinds: [INSTANCE_PATH]}, {id: P-1-0_DI-3, kinds: [INSTANCE_PATH]}]}
+  - {id: path_trailing_slash_does_not_reach_component_segment, graph: base, selector: Wall Switch/, expect: []}
+  - {id: path_case_insensitive, graph: base, selector: house/eg/living ROOM/, expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}, {id: P-1-0_DI-2, kinds: [INSTANCE_PATH]}]}
+  - {id: path_substring_per_segment, graph: base, selector: ou/E/Liv/Wall, expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}]}
+  - {id: path_consecutive_segments_required, graph: base, selector: House/Living room/, expect: []}
+  - {id: path_non_adjacent_segments_do_not_match, graph: base, selector: House/Kitchen/Presence Sensor, expect: []}
+  - {id: path_adjacent_inner_run_without_anchor, graph: base, selector: EG/Kitchen/Presence, expect: [{id: P-1-0_DI-3, kinds: [INSTANCE_PATH]}]}
+  - {id: path_leading_slash_anchors_at_root, graph: base, selector: /House/EG/, expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}, {id: P-1-0_DI-2, kinds: [INSTANCE_PATH]}, {id: P-1-0_DI-3, kinds: [INSTANCE_PATH]}]}
+  - {id: path_leading_slash_rejects_inner_run, graph: base, selector: /EG/, expect: []}
+  - {id: path_leading_slash_root_substring, graph: base, selector: /hou/, expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}, {id: P-1-0_DI-2, kinds: [INSTANCE_PATH]}, {id: P-1-0_DI-3, kinds: [INSTANCE_PATH]}, {id: P-1-0_DI-4, kinds: [INSTANCE_PATH]}]}
+  - {id: path_second_floor, graph: base, selector: OG/, expect: [{id: P-1-0_DI-4, kinds: [INSTANCE_PATH]}]}
+  - {id: path_component_without_name_uses_individual_address, graph: base, selector: OG/Bedroom/1.1.6, kind: INSTANCE_PATH, expect: [{id: P-1-0_DI-4, kinds: [INSTANCE_PATH]}]}
+  - {id: path_unplaced_component_never_matches_by_path, graph: base, selector: Hallway, kind: INSTANCE_PATH, expect: []}
+  - {id: path_unplaced_component_found_by_name_under_any, graph: base, selector: Hallway, expect: [{id: P-1-0_DI-5, kinds: [NAME]}]}
+  - {id: path_slash_only_explicit, graph: base, selector: "/", kind: INSTANCE_PATH, error: {code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH}}
+  - {id: path_only_slashes_explicit, graph: base, selector: "// /", kind: INSTANCE_PATH, error: {code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH}}
+  - {id: path_slash_only_any_is_a_name_query, graph: base, selector: "/", expect: [], evaluated: [NAME]}
+  # -- nested locations (4 levels), empty names, multiple placements, cycles ---------------------------
+  - {id: nested_four_levels_full_path, graph: deep, selector: Block/Level 1/Office/Desk area/Lamp, expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}]}
+  - {id: nested_location_query_includes_inner_locations, graph: deep, selector: Office/, expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}, {id: P-1-0_DI-2, kinds: [INSTANCE_PATH]}]}
+  - {id: nested_innermost_location, graph: deep, selector: /Block/Level 1/Office/Desk/, expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}]}
+  - {id: nested_skipping_a_level_fails, graph: deep, selector: Block/Office/, expect: []}
+  - {id: empty_space_name_falls_back_to_ets_id, graph: odd_names, selector: Home/S2/Lamp, kind: INSTANCE_PATH, expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}]}
+  - {id: empty_component_name_falls_back_to_individual_address, graph: odd_names, selector: Hall/1.1.2, kind: INSTANCE_PATH, expect: [{id: P-1-0_DI-2, kinds: [INSTANCE_PATH]}]}
+  - {id: component_placed_twice_matches_either_path, graph: odd_names, selector: Hall/Twice, kind: INSTANCE_PATH, expect: [{id: P-1-0_DI-3, kinds: [INSTANCE_PATH]}]}
+  - {id: component_placed_twice_matches_other_path, graph: odd_names, selector: S2/Twice, kind: INSTANCE_PATH, expect: [{id: P-1-0_DI-3, kinds: [INSTANCE_PATH]}]}
+  - {id: component_placed_twice_listed_once, graph: odd_names, selector: Home/, expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}, {id: P-1-0_DI-2, kinds: [INSTANCE_PATH]}, {id: P-1-0_DI-3, kinds: [INSTANCE_PATH]}]}
+  - {id: parent_cycle_stops_at_first_repeat, graph: cycle, selector: Lamp, kind: INSTANCE_PATH, expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}]}
+  - {id: parent_cycle_path_is_finite, graph: cycle, selector: Beta/Alpha/Lamp, kind: INSTANCE_PATH, expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}]}
+  # -- order ----------------------------------------------------------------------------------------
+  - {id: order_by_address_unparsable_last, graph: unparsable_address, selector: "a", kind: NAME, expect: [{id: P-1-0_DI-2, kinds: [NAME]}, {id: P-1-0_DI-9, kinds: [NAME]}, {id: P-1-0_DI-7, kinds: [NAME]}, {id: P-1-0_DI-8, kinds: [NAME]}]}
+  # -- blank ----------------------------------------------------------------------------------------
+  - {id: blank_selector, graph: base, selector: "   ", error: {code: INVALID_REQUEST, reason: SELECTOR_BLANK}}
+  - {id: empty_selector, graph: base, selector: "", error: {code: INVALID_REQUEST, reason: SELECTOR_BLANK}}

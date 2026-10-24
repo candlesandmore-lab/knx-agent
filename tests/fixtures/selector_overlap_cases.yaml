@@ -1,0 +1,141 @@
+# ANY overlap rules (003 'ANY overlap rules (binding)'), story 05, T2. User-editable.
+# Each case: graph (name below), selector, optional kind, expected components in order with their match_kinds.
+
+graphs:
+  # DI-1 has individual address 1.1.5; DI-2 is NAMED like that address.
+  named_like_address:
+    areas: [{id: A1, address: 1, name: Area 1}]
+    lines: [{id: L1, area: A1, address: 1, name: Line 1}]
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 5, name: Alpha}
+      - {id: P-1-0_DI-2, line: L1, address: 6, name: "1.1.5"}
+
+  # One component is named 1.1.5 and also has that individual address.
+  same_component:
+    areas: [{id: A1, address: 1, name: Area 1}]
+    lines: [{id: L1, area: A1, address: 1, name: Line 1}]
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 5, name: "1.1.5"}
+      - {id: P-1-0_DI-2, line: L1, address: 6, name: Other}
+
+  # Names that look like ETS ids.
+  named_like_ets_id:
+    areas: [{id: A1, address: 1, name: Area 1}]
+    lines: [{id: L1, area: A1, address: 1, name: Line 1}]
+    components:
+      - {id: P-1-0_DI-3, line: L1, address: 3, name: P-1-0_DI-3}
+      - {id: P-1-0_DI-7, line: L1, address: 7, name: Plain}
+      - {id: P-1-0_DI-8, line: L1, address: 8, name: Copy of P-1-0_DI-7}
+      - {id: P-1-0_DI-9, line: L1, address: 9, name: P-1-0_DI-7}
+
+  # A component name containing '/': matching works on the segment LIST, so 'Ab/Cd' is ONE segment.
+  slash_in_name:
+    areas: [{id: A1, address: 1, name: Area 1}]
+    lines: [{id: L1, area: A1, address: 1, name: Line 1}]
+    spaces: [{id: S1, type: Room, name: Ab}]
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: Ab/Cd, in: [S1]}
+      - {id: P-1-0_DI-2, line: L1, address: 2, name: Cd, in: [S1]}
+
+  # A value without '/' never evaluates INSTANCE_PATH under ANY.
+  room_word:
+    areas: [{id: A1, address: 1, name: Area 1}]
+    lines: [{id: L1, area: A1, address: 1, name: Line 1}]
+    spaces: [{id: S1, type: Room, name: Hall}]
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: Hall light, in: [S1]}
+      - {id: P-1-0_DI-2, line: L1, address: 2, name: Lamp, in: [S1]}
+
+  # Mixed result: the first component (lower address) matches by NAME, the second by INDIVIDUAL_ADDRESS.
+  order_by_component:
+    areas: [{id: A1, address: 1, name: Area 1}]
+    lines: [{id: L1, area: A1, address: 1, name: Line 1}]
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: "1.1.9"}
+      - {id: P-1-0_DI-9, line: L1, address: 9, name: Beta}
+
+# Values for which the individual address and ETS id syntaxes must never both fit.
+exclusive_values: ["1.1.5", "01.1.5", "P-1-0_DI-5", "P-1-0_DI-5~2", "P-1.1.5", "1.1.5_DI-5", "1/1/5", "0.0.0", "15.15.255"]
+
+cases:
+  - id: component_named_like_another_components_address
+    graph: named_like_address
+    selector: "1.1.5"
+    expect: [{id: P-1-0_DI-1, kinds: [INDIVIDUAL_ADDRESS]}, {id: P-1-0_DI-2, kinds: [NAME]}]
+    match_count: 2
+  - id: one_component_named_like_its_own_address_is_listed_once
+    graph: same_component
+    selector: "1.1.5"
+    expect: [{id: P-1-0_DI-1, kinds: [INDIVIDUAL_ADDRESS, NAME]}]
+    match_count: 1
+  - id: explicit_individual_address_has_a_single_kind
+    graph: same_component
+    selector: "1.1.5"
+    kind: INDIVIDUAL_ADDRESS
+    expect: [{id: P-1-0_DI-1, kinds: [INDIVIDUAL_ADDRESS]}]
+  - id: explicit_name_has_a_single_kind
+    graph: same_component
+    selector: "1.1.5"
+    kind: NAME
+    expect: [{id: P-1-0_DI-1, kinds: [NAME]}]
+  - id: explicit_individual_address_ignores_the_component_with_that_name
+    graph: named_like_address
+    selector: "1.1.5"
+    kind: INDIVIDUAL_ADDRESS
+    expect: [{id: P-1-0_DI-1, kinds: [INDIVIDUAL_ADDRESS]}]
+  - id: explicit_name_ignores_the_component_with_that_address
+    graph: named_like_address
+    selector: "1.1.5"
+    kind: NAME
+    expect: [{id: P-1-0_DI-2, kinds: [NAME]}]
+  - id: component_named_like_its_own_ets_id_merges_name_and_ets_id
+    graph: named_like_ets_id
+    selector: P-1-0_DI-3
+    expect: [{id: P-1-0_DI-3, kinds: [ETS_ID, NAME]}]
+  - id: components_named_like_an_ets_id_match_by_name_next_to_the_id_owner
+    graph: named_like_ets_id
+    selector: P-1-0_DI-7
+    expect:
+      - {id: P-1-0_DI-7, kinds: [ETS_ID]}
+      - {id: P-1-0_DI-8, kinds: [NAME]}
+      - {id: P-1-0_DI-9, kinds: [NAME]}
+    match_count: 3
+  - id: explicit_ets_id_ignores_names
+    graph: named_like_ets_id
+    selector: P-1-0_DI-7
+    kind: ETS_ID
+    expect: [{id: P-1-0_DI-7, kinds: [ETS_ID]}]
+  - id: name_with_slash_matches_name_and_path_merged
+    graph: slash_in_name
+    selector: b/c
+    expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH, NAME]}, {id: P-1-0_DI-2, kinds: [INSTANCE_PATH]}]
+    evaluated: [INSTANCE_PATH, NAME]
+  - id: full_name_with_slash_merges_both_kinds
+    graph: slash_in_name
+    selector: Ab/Cd
+    expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH, NAME]}, {id: P-1-0_DI-2, kinds: [INSTANCE_PATH]}]
+  - id: explicit_name_with_slash_is_a_single_kind
+    graph: slash_in_name
+    selector: Ab/Cd
+    kind: NAME
+    expect: [{id: P-1-0_DI-1, kinds: [NAME]}]
+  - id: explicit_path_with_slash_is_a_single_kind
+    graph: slash_in_name
+    selector: Ab/Cd
+    kind: INSTANCE_PATH
+    expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}, {id: P-1-0_DI-2, kinds: [INSTANCE_PATH]}]
+  - id: value_without_slash_never_evaluates_instance_path
+    graph: room_word
+    selector: hall
+    expect: [{id: P-1-0_DI-1, kinds: [NAME]}]
+    evaluated: [NAME]
+  - id: explicit_instance_path_reaches_the_location_segment
+    graph: room_word
+    selector: hall
+    kind: INSTANCE_PATH
+    expect: [{id: P-1-0_DI-1, kinds: [INSTANCE_PATH]}, {id: P-1-0_DI-2, kinds: [INSTANCE_PATH]}]
+  - id: mixed_result_is_ordered_by_component_not_by_kind
+    graph: order_by_component
+    selector: "1.1.9"
+    expect: [{id: P-1-0_DI-1, kinds: [NAME]}, {id: P-1-0_DI-9, kinds: [INDIVIDUAL_ADDRESS]}]
+    match_count: 2

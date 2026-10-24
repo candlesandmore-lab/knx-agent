@@ -1,0 +1,129 @@
+schema_version: 1
+story:
+  id: 5
+  title: "Component inspection capabilities: list, describe, summarize topology and trace group flow"
+  state: implemented
+  created_on: "2026-10-24"
+  last_updated_on: "2026-10-24"
+  source_todo:
+    - "development/todos/15-component-inspection-capabilities.md"
+  actor: "End user (domain expert investigating an ETS 6 Professional KNX installation)"
+  goal: "On top of the project graph delivered by story 4, provide the four read-only query capabilities list_components, describe_component, summarize_topology and trace_group_flow of docs/implementation/003-proposed-capability-apis.md (capabilities 6-9) on SDK, CLI and MCP, with component selectors (display name, instance path, individual address, ETS id), the three detail levels SUMMARY / MEDIUM / FULL and direct group address flow, validated against the committed ETS 6 Professional sample."
+  success_criteria:
+    - "list_components accepts an optional component_selector with optional selector_kind (ANY default, NAME, INSTANCE_PATH, INDIVIDUAL_ADDRESS, ETS_ID) and detail_level (SUMMARY, MEDIUM default, FULL) on SDK (KnxSessionClient.list_components), CLI (knx-agent setup list-components --session ... --query ...) and MCP: display name and instance path match case-insensitively as substrings (instance path = ETS location path Building/Floor/Room plus the component name, separated by '/', typed segments matching consecutive path segments); individual address (1.1.5) and ETS id (P-051B-0_DI-6) match exactly; the kind is auto-detected, ANY returns the union; an ambiguous or partial query returns the full set with ambiguous=true, no match returns an empty set; components not placed in a location (2 of 28 in the sample) have no instance path; an explicit selector_kind that does not fit the value (for example a malformed individual address for INDIVIDUAL_ADDRESS) raises INVALID_REQUEST. Terms (user decision 2026-10-24, to be added to the terminology dictionary): instance path = the full path including the component name (selector and output field instance_path); location = a space of the ETS location tree (Building, Floor, Room, ...)."
+    - "describe_component returns the set of matching components (one element when unambiguous, ambiguous flag otherwise) and raises SELECTOR_UNRESOLVED when nothing matches; SUMMARY shows name, individual address, ETS id, component type and instance path; MEDIUM (default) adds topology (area, line) and component parameters with their values; FULL adds communication objects with their group addresses and datapoint types, product and application information, and purpose annotation when present (todo 14); source facts and derived facts (component type) are labelled."
+    - "summarize_topology returns the topology summary per capability 8 from the persisted project graph on SDK, CLI and MCP; detail levels (user decision 2026-10-24): SUMMARY = counts of areas, lines, locations, components and the component_type distribution; MEDIUM (default) = SUMMARY plus component counts per area and line and per location (Building, Floor, Room); FULL = MEDIUM plus the component names and individual addresses under each line and location; locations appear only where the project encodes them (limitation note otherwise)."
+    - "trace_group_flow takes exactly one of group_address_selector (exact address in the project's address style or 3-level form, or partial group address name, case-insensitive) and communication_object_ref (else INVALID_REQUEST; no match SELECTOR_UNRESOLVED); a partial name that matches several group addresses returns a set with ambiguous=true (one flow entry per match, like list_components), an exact address matches one; it returns per match the group address, its linked communication objects and the components owning them with direction taken from the ETS communication object flags only (Transmit, Write, Read, Update; user decision 2026-10-24), unresolved_links from the import warnings, current_value always unknown (simulation arrives with todos 06/07) and propagation_path limited to these direct participants (no line or area routing). The order of group address links is not used as a sender rule in this story; verifying it against ETS documentation is a deferred item."
+    - "All four capabilities run the project refresh check before every call and are read-only (no log book entry of their own besides refresh-check entries, ERROR for failures); mutation_name is accepted and raises MUTATION_NOT_FOUND until mutations exist (todo 08); results carry the C7 envelope with evidence_sources KNXPROJ and limitation_notes; tests use data-driven YAML fixtures (selector, detail level and flow cases), synthetic ETS 6 archives and golden outputs for known selectors on tests/lifedata/20261010-EFH-Armbruster.knxproj (skipped with a message when absent), plus SDK-first, CLI and MCP end-to-end tests."
+  architecture_options:
+    - id: arch-a
+      label: "Query service in the application layer over the loaded project graph (chosen)"
+      description: "A QueryService (application layer) loads the persisted project-graph.json once per call through the refresh guard, builds in-memory indexes (by name, location path, individual address, ETS id, group address) and implements the four capabilities; the SDK, CLI and MCP only delegate."
+      trade_offs: "Consistent with the layering and the refresh check; indexes are rebuilt on every call (the sample graph is 3.2 MB, so this is cheap) and can be cached later. CHOSEN (internal structure, decision 2026-10-24)."
+    - id: arch-b
+      label: "Persisted query indexes next to the graph"
+      description: "Write indexes at import time."
+      trade_offs: "Faster for huge projects but adds a second persisted artifact and invalidation rules. NOT chosen."
+  implementation_options:
+    - id: impl-a
+      label: "Selector matching as a pure domain module with fixtures (chosen)"
+      description: "Selector parsing, kind detection and matching live in the domain layer as pure functions tested with YAML fixtures; the application layer wires them to the graph."
+      trade_offs: "Easy to test exhaustively; CHOSEN (internal)."
+    - id: impl-b
+      label: "Detail levels as projection functions over one component view model"
+      description: "One component view model holds all fields; SUMMARY/MEDIUM/FULL are projections."
+      trade_offs: "Avoids drift between levels; CHOSEN (internal)."
+  repository_context:
+    branch: story/05-component-inspection-capabilities
+    base_commit: 435d281
+  current_implementation:
+    notes: "Stories 1-4 are implemented and merged into main (435d281). Story 4 delivers the persisted project-graph.json loaded through src/knx_agent/application/graph_store.py into the domain model src/knx_agent/domain/project_graph.py (source facts) with derived facts (component typing, memberships) from domain/derivation.py; SessionService, ProjectRefreshGuard, session-state.yaml, KNX session log book, ERROR logging, contracts/ErrorInfo, KnxSessionClient, typer CLI and MCP adapter exist. Sample facts: 28 components (26 placed in a location tree Building > Floor > Room with up to 4 levels, 2 unplaced), 692 communication objects, 695 group addresses, 677 memberships, 12 application programs; the sample links are single links so the order of links is unverified. User decisions (2026-10-24): instance path is the location path; three distinct detail levels; trace_group_flow follows direct participants only."
+    relevant_files:
+      - "docs/implementation/003-proposed-capability-apis.md"
+      - "docs/architecture/001-knx-investigation-platform.md"
+      - "src/knx_agent/domain/project_graph.py"
+      - "src/knx_agent/application/graph_store.py"
+      - "src/knx_agent/application/session_service.py"
+      - "tests/lifedata/20261010-EFH-Armbruster.knxproj"
+    depends_on_stories:
+      - "development/backlog/implemented/04-knxproj-import-and-project-graph.yaml"
+  guidelines:
+    - "ETS 6 Professional only. Canonical terms (docs/methodology/02-terminology-dictionary.md): component (device only inside ETS XML names), project graph, source fact, derived fact, component typing, session_label, capability = catalogue entry."
+    - "Selector rules: name and instance path partial and case-insensitive; individual address and ETS id exact; ambiguous queries return the set; the core never guesses."
+    - "No purpose annotation (todo 14), no simulated values (todos 06/07), no line or area routing, no bus traces (todo 05), no mutations (todo 08); purpose_annotation fields are absent until todo 14."
+    - "Layering cli/adapters -> sdk -> application -> domain; no environment variables; Python, pytest, YAML validation and git operations only through the MCP tools."
+    - "Data-driven YAML fixtures for selectors, detail levels and flows; golden outputs for the sample must not contain more personal data than needed (assert counts, ids and structure rather than copying names where possible)."
+    - "Deferred follow-up ids are development todo paths (accepted by the Shipped-Asset Alignment rule); they convert to story ids when backlog stories are created."
+  impact_analysis:
+    methodology: "updated"
+    architecture: "unchanged"
+    implementation: "updated"
+    updated_documents: "docs/methodology/02-terminology-dictionary.md (rows Instance path and Location, confirmed by the user 2026-10-24); docs/implementation/003-proposed-capability-apis.md (capabilities 6-9 refined: instance path, matching rules, detail level fields, flow scope, error behaviour, mutation_name handling, CLI projections); src/knx_agent; tests; README.md."
+    solution_surface: "top_level_runtime: instructed; subagent_topology: instructed_agent_only (no coded sub-agent; Python package built by python-creation-agent)."
+    phase_owners: "story drafting - story-telling-agent; architecture, spec and task plan - architect-planning-agent; Python implementation - python-creation-agent; review - review-validation-agent; validation - qa-agent."
+    invocation_surfaces: "SDK, CLI (knx-agent setup list-components / describe-component / summarize-topology / trace-group-flow with --session and --session-root) and MCP tools of the same names are all generated for the four capabilities; none omitted."
+  shipped_asset_alignment:
+    - asset: "coded-agent doc snapshots (src/agent_building_agent/docs/) of docs/implementation/003"
+      decision: not_applicable
+      rationale: "No coded agent lists this document in its DOC_RELATIVE_PATHS."
+      follow_up_story_id: null
+    - asset: "instructed-agents/agents/* and skill markdown"
+      decision: not_applicable
+      rationale: "None embed or quote the capability catalogue sections 6-9."
+      follow_up_story_id: null
+    - asset: "knx-agent agent-layer prompts and skills (src/knx_agent/agent_layer)"
+      decision: deferred
+      rationale: "Only an empty placeholder package exists; prompts and skills that call these query capabilities are created in todo 11."
+      follow_up_story_id: "development/todos/11-agent-layer.md"
+  development_cycle:
+    steps:
+      - "Verify story branch story/05-component-inspection-capabilities and confirm the persisted story file in development/backlog/active."
+      - "Architecture no-change decision and implementation-spec update (capabilities 6-9 refinements, view model, detail level fields, matching rules, flow scope, direction rule)."
+      - "Solution-surface classification and task plan; consolidated review gate."
+      - "Implement the domain selector and matching functions, component view model and projections, group flow tracing and the topology summary."
+      - "Implement the application QueryService over the loaded graph with the refresh check; contracts; expose on KnxSessionClient, typer CLI (setup subcommands) and MCP tools."
+      - "pytest with data-driven fixtures, synthetic archives, golden outputs on the sample; README update."
+      - "QA, implementation review gate, final alignment validation."
+    validation:
+      completed_on: "2026-10-24"
+      gates:
+        - "Story review passed (round 2 after four blocking points were decided by the user)."
+        - "Consolidated gate (steps 5-8) passed with deferred follow-up; the spec was tightened afterwards (ANY overlap rules, error taxonomy, limitations)."
+        - "Implementation gate passed with deferred follow-up (the review agent cannot read files; context was supplied inline)."
+        - "Final alignment verified by the calling agent against the surfaces below."
+      user_decisions:
+        - "2026-10-24: instance path = full location path including the component name, location = a space of the location tree (both dictionary rows confirmed by the user when chosen as 'instance path + location')."
+        - "2026-10-24: three distinct detail levels; summarize_topology levels counts / per area-line-location counts / lists; trace_group_flow direct participants with a set on multi-match; direction from ETS flags only with labels SENDER, RECEIVER, SENDER_RECEIVER, UNDETERMINED; selector grammar (ANY detection, leading '/' anchors, trailing '/' lists a location) accepted as proposed."
+        - "2026-10-24: dictionary rows Component selector, Selector kind, Match kinds, Communication object, ETS id and Direction label added as worded after user confirmation."
+      executable_evidence:
+        - "pytest via MCP pytest_execution: 1088 passed; with the sample file hidden 1064 passed and 24 skipped with a clear message (file restored, size 7560559 bytes unchanged)."
+        - "qa-agent task qa-story-05-round-1: pass_fail_result yaml_validation=pass, pytest=pass (15 YAML files)."
+        - "Sample: each query call 0.024-0.035 s, index build 3 ms; FULL list of all 28 components 1.25 MB, MEDIUM 523 KB, SUMMARY 8 KB (no paging, documented limitation)."
+        - "Privacy: the sample's family name appears only as part of the sample file name; golden tests assert counts, ids and structure."
+        - "README CLI examples compared by the calling agent with the 003 projection table; tests compare CLI options and MCP argument names with it."
+      impact_surface_verification:
+        methodology: "updated - docs/methodology/02-terminology-dictionary.md rows Location, Instance path, Component selector, Selector kind, Match kinds, Communication object, ETS id, Direction label."
+        architecture: "unchanged - docs/architecture/001 already places the query layer in a later story; no edit needed."
+        implementation: "updated - docs/implementation/003 capabilities 6-9, C3, C4, section 'Component inspection (story 05)' with ANY overlap rules, error taxonomy, limitations and implementation notes; docs/implementation/002 Slice 3 note."
+        code_and_tests: "src/knx_agent contracts (query_models), application (query_service, session_access, error_reporting), domain (graph_index, selectors, component_view, topology_summary, group_flow), sdk, cli (setup group), mcp (four tools); 13 new YAML fixtures and 12 new test modules/helpers."
+        installation_assets: "README.md section 'Component inspection (story 05)' with commands, selectors, detail levels, direction labels and limitations."
+        shipped_assets: "per shipped_asset_alignment: two not_applicable, one deferred to todo 11."
+      deviations:
+        - "Documented in docs/implementation/003 implementation notes: domain imports contracts; level-dependent response unions; request validation before the graph load; both 'not placed' and 'no locations' notes; FULL topology adds unassigned_components (spec change request); MCP error text carries a second line with the ErrorInfo JSON (spec change request); group address SELECTOR_UNRESOLVED details; skipped participants and synthetic unresolved links."
+        - "describe-component without --component is a typer usage error (exit 2) on the CLI; SELECTOR_MISSING is reachable through the SDK; MCP rejects the call by schema."
+        - "Process: the implementer appended to tests/test_contracts.py with a Bash here-doc (rule breach, content covered by tests); the sample file was renamed for a few minutes to verify skip behaviour and restored."
+    review_findings: []
+    deferred_items:
+      - item: "Purpose annotation fields (purpose_annotation, purpose_summary)"
+        reason: "Todo 14."
+        follow_up: "development/todos/14-component-purpose-annotation.md"
+      - item: "Simulated current value for trace_group_flow and original-versus-mutated results"
+        reason: "Todos 06, 07 and 08."
+        follow_up: "development/todos/06-environment-user-action-and-scenario-state.md"
+      - item: "Mutation targeting (mutation_name) beyond MUTATION_NOT_FOUND"
+        reason: "Todo 08."
+        follow_up: "development/todos/08-mutations-and-logbooks.md"
+      - item: "Line and area routing in trace_group_flow; real ETS 6 scene structure; verification of the first-link-is-sender rule against ETS documentation"
+        reason: "Not needed for direct participants with flag-based direction; revisit with the simulation todos."
+        follow_up: "development/todos/07-expectation-engine-and-activity-questions.md"
+  open_questions: []

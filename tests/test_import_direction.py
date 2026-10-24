@@ -9,7 +9,7 @@ LAYERS = {"domain", "application", "adapters", "sdk", "cli", "agent_layer", "con
 # Allowed knx_agent sub-package imports per layer (besides itself).
 ALLOWED = {
     "contracts": set(),
-    "domain": set(),
+    "domain": {"contracts"},  # story 05: selectors raise KnxAgentError, views build contract models (003 layer model)
     "application": {"domain", "contracts"},
     "sdk": {"application", "domain", "contracts"},
     "cli": {"sdk", "contracts"},

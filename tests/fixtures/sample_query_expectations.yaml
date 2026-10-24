@@ -1,0 +1,30 @@
+# Golden structure of the committed ETS 6 sample for the query capabilities (story 05, T8). User-editable.
+# Counts, ids and structure only; no project, building, room or component names (the tests take names at run time
+# from the imported graph). A mismatch is investigated, not silently re-baselined.
+# Cross-checked with tests/fixtures/sample_project_counts.yaml (story 04).
+
+sample_file: 20261010-EFH-Armbruster.knxproj
+
+components:
+  total: 28
+  placed: 26
+  unplaced: 2
+  component_type_counts: {ACTUATOR: 2, CONTROLLER: 11, IP_COUPLER_OR_INTERFACE: 1, SENSOR: 11, UNTYPED: 3}
+
+topology:
+  areas: 2
+  lines: 3
+  locations: 21
+  max_location_depth: 4
+
+totals:
+  parameters: 3132            # parameter nodes = component_parameters over all components (MEDIUM)
+  communication_objects: 692  # FULL
+  distinct_application_program_ids: 12
+  group_addresses: 695
+  memberships: 677            # participants over all group addresses
+
+example_component_id: P-051B-0_DI-6
+
+# Wall time bound per call (seconds); the measured times are printed with pytest -s.
+timing_bound_s: 30

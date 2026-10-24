@@ -1,0 +1,290 @@
+# trace_group_flow cases (story 05, T5). User-editable.
+# Direction comes from the ETS flags only (tx = transmit, rx = write, both, rd = read only, upd = update only).
+# expect: count, ambiguous, addresses (ets ids in order), entries (JSON subset per entry) or error.
+
+graphs:
+  flow:
+    style: ThreeLevel
+    areas: [{id: A1, address: 1, name: Area}]
+    lines: [{id: L1, area: A1, address: 1, name: Line}]
+    spaces:
+      - id: S1
+        type: Building
+        name: House
+        children: [{id: S2, type: Room, name: Hall}]
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: Switch, in: [S2]}
+      - {id: P-1-0_DI-2, line: L1, address: 2, name: Lamp A, in: [S2]}
+      - {id: P-1-0_DI-3, line: L1, address: 3, name: Lamp B}
+      - {id: P-1-0_DI-4, line: L1, address: 4, name: Both}
+      - {id: P-1-0_DI-5, line: L1, address: 5, name: Silent}
+      - {id: P-1-0_DI-6, line: L1, address: 6, name: Unknown}
+      - {id: P-1-0_DI-7, line: L1, address: 7, name: Twice}
+    objects:
+      - {component: P-1-0_DI-1, ref: O-0_R-1, number: 0, text: Press, flags: tx, dpt: [DPST-1-1], links: [G1]}
+      - {component: P-1-0_DI-1, ref: O-1_R-2, number: 1, text: Second, flags: tx, dpt: [DPST-1-1], links: [G4, G3]}
+      - {component: P-1-0_DI-2, ref: O-0_R-1, number: 0, flags: rx, links: [G1]}
+      - {component: P-1-0_DI-2, ref: O-1_R-2, number: 1, flags: none}
+      - {component: P-1-0_DI-3, ref: O-0_R-1, number: 0, flags: rx, links: [G1]}
+      - {component: P-1-0_DI-3, ref: O-1_R-2, number: 1, flags: upd, links: [G4]}
+      - {component: P-1-0_DI-4, ref: O-0_R-1, number: 0, flags: both, links: [G2]}
+      - {component: P-1-0_DI-5, ref: O-0_R-1, number: 0, flags: rd, links: [G2]}
+      - {component: P-1-0_DI-6, ref: O-0_R-1, number: 0, resolved: false, links: [G2]}
+      - {component: P-1-0_DI-7, ref: O-1_R-2, number: 1, flags: rx, links: [G3]}
+      - {component: P-1-0_DI-7, ref: O-0_R-1, number: 0, flags: tx, links: [G3]}
+    group_ranges:
+      - {id: R1, name: Main}
+      - {id: R2, name: Middle, parent: R1}
+    group_addresses:
+      - {id: G1, address: "1/0/1", name: Light switch, dpt: DPST-1-1, range: R2, description: The switching address}
+      - {id: G2, address: "1/0/2", name: Light status, dpt: DPST-1-1, range: R2}
+      - {id: G3, address: "1/0/3", name: Light feedback, range: R2}
+      - {id: G4, address: "1/0/4", range: R2}
+      - {id: G5, address: "2/0/1", name: Unlinked}
+    warnings:
+      - {code: GROUP_ADDRESS_LINK_UNRESOLVED, message: Link GA-99 names a group address that does not exist., location: "P-1/0.xml#P-1-0_DI-2/co/O-0_R-1"}
+      - {code: COMOBJECT_DEFINITION_UNRESOLVED, message: Communication object has no definition., location: "P-1/0.xml#P-1-0_DI-6/co/O-0_R-1"}
+      - {code: PARAMETER_DEFINITION_UNRESOLVED, message: Not a link warning., location: "P-1/0.xml#P-1-0_DI-6/pa/P-1_R-1"}
+
+  # The same objects with the link order of the multi-linked object reversed: directions must not change.
+  link_order_a:
+    areas: [{id: A1, address: 1, name: Area}]
+    lines: [{id: L1, area: A1, address: 1, name: Line}]
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: One}
+      - {id: P-1-0_DI-2, line: L1, address: 2, name: Two}
+    objects:
+      - {component: P-1-0_DI-1, ref: O-0_R-1, number: 0, flags: rx, links: [G1, G2]}
+      - {component: P-1-0_DI-2, ref: O-0_R-1, number: 0, flags: tx, links: [G2, G1]}
+    group_addresses: [{id: G1, address: "1/0/1", name: A}, {id: G2, address: "1/0/2", name: B}]
+  link_order_b:
+    areas: [{id: A1, address: 1, name: Area}]
+    lines: [{id: L1, area: A1, address: 1, name: Line}]
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: One}
+      - {id: P-1-0_DI-2, line: L1, address: 2, name: Two}
+    objects:
+      - {component: P-1-0_DI-1, ref: O-0_R-1, number: 0, flags: rx, links: [G2, G1]}
+      - {component: P-1-0_DI-2, ref: O-0_R-1, number: 0, flags: tx, links: [G1, G2]}
+    group_addresses: [{id: G1, address: "1/0/1", name: A}, {id: G2, address: "1/0/2", name: B}]
+
+  two_level:
+    style: TwoLevel
+    group_addresses: [{id: G1, address: "1/5", name: Foo}]
+  free_style:
+    style: Free
+    group_addresses: [{id: G1, raw: 300, name: Bar}]
+  unresolved_without_warning:
+    areas: [{id: A1, address: 1, name: Area}]
+    lines: [{id: L1, area: A1, address: 1, name: Line}]
+    components: [{id: P-1-0_DI-1, line: L1, address: 1, name: One}]
+    objects: [{component: P-1-0_DI-1, ref: O-0_R-1, number: 0, resolved: false, links: [G1]}]
+    group_addresses: [{id: G1, address: "1/0/1", name: A}]
+
+cases:
+  - id: single_sender_and_receivers_with_link_warning
+    graph: flow
+    selector: "1/0/1"
+    expect:
+      count: 1
+      ambiguous: false
+      addresses: [G1]
+      entries:
+        - group_address: {ets_id: G1, address: "1/0/1", name: Light switch, datapoint_type: DPST-1-1, description: The switching address}
+          participants:
+            - component: {ets_id: P-1-0_DI-1, name: Switch, individual_address: "1.1.1", instance_path: House/Hall/Switch, component_type: SENSOR}
+              communication_object: {ets_id: P-1-0_DI-1/co/O-0_R-1, object_number: 0, label: Press, datapoint_types: [DPST-1-1]}
+              direction: SENDER
+              roles: [TRANSMITS]
+            - component: {ets_id: P-1-0_DI-2, instance_path: House/Hall/Lamp A, component_type: ACTUATOR}
+              direction: RECEIVER
+              roles: [ACCEPTS_WRITE]
+            - component: {ets_id: P-1-0_DI-3, instance_path: null}
+              direction: RECEIVER
+              roles: [ACCEPTS_WRITE]
+          propagation_path: {scope: DIRECT_PARTICIPANTS, senders: [P-1-0_DI-1], receivers: [P-1-0_DI-2, P-1-0_DI-3]}
+          unresolved_links:
+            - code: GROUP_ADDRESS_LINK_UNRESOLVED
+              communication_object_id: P-1-0_DI-2/co/O-0_R-1
+              component_id: P-1-0_DI-2
+              message: Link GA-99 names a group address that does not exist.
+              location: "P-1/0.xml#P-1-0_DI-2/co/O-0_R-1"
+          current_value: unknown
+
+  - id: sender_receiver_read_only_and_unresolved_flags
+    graph: flow
+    selector: "1/0/2"
+    expect:
+      count: 1
+      ambiguous: false
+      addresses: [G2]
+      entries:
+        - participants:
+            - {component: {ets_id: P-1-0_DI-4}, direction: SENDER_RECEIVER, roles: [ACCEPTS_WRITE, TRANSMITS]}
+            - {component: {ets_id: P-1-0_DI-5}, direction: UNDETERMINED, roles: [ANSWERS_READ]}
+            - {component: {ets_id: P-1-0_DI-6}, direction: UNDETERMINED, roles: []}
+          propagation_path: {senders: [P-1-0_DI-4], receivers: [P-1-0_DI-4]}
+          unresolved_links:
+            - {code: COMOBJECT_DEFINITION_UNRESOLVED, communication_object_id: P-1-0_DI-6/co/O-0_R-1, component_id: P-1-0_DI-6, message: Communication object has no definition.}
+
+  - id: same_component_through_two_objects_is_listed_per_object_and_once_in_the_path
+    graph: flow
+    selector: "1/0/3"
+    expect:
+      count: 1
+      ambiguous: false
+      addresses: [G3]
+      entries:
+        - participants:
+            - {component: {ets_id: P-1-0_DI-1}, communication_object: {ets_id: P-1-0_DI-1/co/O-1_R-2, object_number: 1}, direction: SENDER}
+            - {component: {ets_id: P-1-0_DI-7}, communication_object: {object_number: 0}, direction: SENDER}
+            - {component: {ets_id: P-1-0_DI-7}, communication_object: {object_number: 1}, direction: RECEIVER}
+          propagation_path: {senders: [P-1-0_DI-1, P-1-0_DI-7], receivers: [P-1-0_DI-7]}
+          unresolved_links: []
+
+  - id: update_flag_receives_and_unnamed_address_is_found_by_address
+    graph: flow
+    selector: "1/0/4"
+    expect:
+      count: 1
+      ambiguous: false
+      addresses: [G4]
+      entries:
+        - group_address: {ets_id: G4, address: "1/0/4", name: null}
+          participants:
+            - {component: {ets_id: P-1-0_DI-1}, direction: SENDER, roles: [TRANSMITS]}
+            - {component: {ets_id: P-1-0_DI-3}, direction: RECEIVER, roles: [ACCEPTS_UPDATE]}
+
+  - id: address_without_participants
+    graph: flow
+    selector: "2/0/1"
+    expect:
+      count: 1
+      ambiguous: false
+      addresses: [G5]
+      entries:
+        - participants: []
+          propagation_path: {scope: DIRECT_PARTICIPANTS, senders: [], receivers: []}
+          unresolved_links: []
+          current_value: unknown
+
+  - id: partial_name_returns_every_match_ordered_by_address
+    graph: flow
+    selector: LIGHT
+    expect:
+      count: 3
+      ambiguous: true
+      addresses: [G1, G2, G3]
+
+  - id: partial_name_with_one_match_is_not_ambiguous
+    graph: flow
+    selector: feedback
+    expect:
+      count: 1
+      ambiguous: false
+      addresses: [G3]
+
+  - id: unnamed_addresses_never_match_by_name
+    graph: flow
+    selector: "e"
+    expect:
+      count: 2
+      ambiguous: true
+      addresses: [G3, G5]
+
+  - id: partial_name_nothing_matches
+    graph: flow
+    selector: xyz
+    expect:
+      error: {code: SELECTOR_UNRESOLVED, details: {selector: xyz, selector_kind: GROUP_ADDRESS, evaluated_kinds: [NAME]}}
+
+  - id: two_level_form_in_a_three_level_project_is_a_name
+    graph: flow
+    selector: "1/0"
+    expect:
+      error: {code: SELECTOR_UNRESOLVED, details: {selector: "1/0", evaluated_kinds: [NAME]}}
+
+  - id: nonexistent_exact_address
+    graph: flow
+    selector: "9/0/9"
+    expect:
+      error: {code: SELECTOR_UNRESOLVED, details: {selector: "9/0/9", selector_kind: GROUP_ADDRESS, evaluated_kinds: [ADDRESS], address_raw: 18441}}
+
+  - id: exact_address_is_not_a_name_search_even_when_nothing_exists
+    graph: flow
+    selector: "31/7/255"
+    expect:
+      error: {code: SELECTOR_UNRESOLVED, details: {address_raw: 65535}}
+
+  - id: two_level_project_two_level_form
+    graph: two_level
+    selector: "1/5"
+    expect: {count: 1, ambiguous: false, addresses: [G1]}
+  - id: two_level_project_three_level_form_still_valid
+    graph: two_level
+    selector: "1/0/5"
+    expect: {count: 1, ambiguous: false, addresses: [G1]}
+  - id: two_level_project_plain_integer_is_a_name
+    graph: two_level
+    selector: "2053"
+    expect: {error: {code: SELECTOR_UNRESOLVED, details: {evaluated_kinds: [NAME]}}}
+  - id: free_project_plain_integer
+    graph: free_style
+    selector: "300"
+    expect: {count: 1, ambiguous: false, addresses: [G1]}
+  - id: free_project_three_level_form_still_valid
+    graph: free_style
+    selector: "0/1/44"
+    expect: {count: 1, ambiguous: false, addresses: [G1]}
+
+  - id: object_ref_with_two_group_addresses
+    graph: flow
+    object_ref: P-1-0_DI-1/co/O-1_R-2
+    expect:
+      count: 2
+      ambiguous: true
+      addresses: [G3, G4]
+  - id: object_ref_with_one_group_address
+    graph: flow
+    object_ref: P-1-0_DI-4/co/O-0_R-1
+    expect: {count: 1, ambiguous: false, addresses: [G2]}
+  - id: object_ref_without_link
+    graph: flow
+    object_ref: P-1-0_DI-2/co/O-1_R-2
+    expect: {count: 0, ambiguous: false, addresses: [], extra_note: The communication object is not linked to any group address.}
+  - id: object_ref_unknown
+    graph: flow
+    object_ref: P-1-0_DI-1/co/O-9_R-9
+    expect:
+      error: {code: SELECTOR_UNRESOLVED, details: {selector: P-1-0_DI-1/co/O-9_R-9, selector_kind: COMMUNICATION_OBJECT_REF}}
+  - id: object_ref_without_marker
+    graph: flow
+    object_ref: O-1_R-2
+    expect: {error: {code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH}}
+
+  - id: unresolved_object_without_warning_is_reported_anyway
+    graph: unresolved_without_warning
+    selector: "1/0/1"
+    expect:
+      count: 1
+      ambiguous: false
+      addresses: [G1]
+      entries:
+        - participants: [{component: {ets_id: P-1-0_DI-1}, direction: UNDETERMINED, roles: []}]
+          unresolved_links:
+            - code: COMOBJECT_DEFINITION_UNRESOLVED
+              communication_object_id: P-1-0_DI-1/co/O-0_R-1
+              component_id: P-1-0_DI-1
+              message: The definition of the communication object could not be resolved; its flags are unknown.
+
+  # -- request rules -------------------------------------------------------------------------------
+  - {id: both_selectors, graph: flow, selector: "1/0/1", object_ref: P-1-0_DI-1/co/O-0_R-1, expect: {error: {code: INVALID_REQUEST, reason: SELECTOR_CONFLICT}}}
+  - {id: neither_selector, graph: flow, expect: {error: {code: INVALID_REQUEST, reason: SELECTOR_MISSING}}}
+  - {id: blank_group_address, graph: flow, selector: "   ", expect: {error: {code: INVALID_REQUEST, reason: SELECTOR_BLANK}}}
+  - {id: blank_object_ref, graph: flow, object_ref: "", expect: {error: {code: INVALID_REQUEST, reason: SELECTOR_BLANK}}}
+  - {id: blank_value_counts_as_given_so_two_values_conflict, graph: flow, selector: "", object_ref: P-1-0_DI-1/co/O-0_R-1, expect: {error: {code: INVALID_REQUEST, reason: SELECTOR_CONFLICT}}}
+
+# Reversing the link order of an object must not change any direction (link order is not a sender rule).
+link_order_independence:
+  - {id: address_one, selector: "1/0/1", expected_directions: {P-1-0_DI-1: RECEIVER, P-1-0_DI-2: SENDER}}
+  - {id: address_two, selector: "1/0/2", expected_directions: {P-1-0_DI-1: RECEIVER, P-1-0_DI-2: SENDER}}

@@ -1,0 +1,233 @@
+# Component view per detail level (story 05, T3). User-editable.
+# Each case builds the view of one component at every level and compares a JSON subset (lists element by element)
+# plus the exact top-level keys and a list of key paths that must be ABSENT (not null) at that level.
+
+graphs:
+  detail:
+    areas: [{id: A1, address: 1, name: Area One}]
+    lines: [{id: L1, area: A1, address: 1, name: Line One}]
+    spaces:
+      - id: S1
+        type: Building
+        name: House
+        children:
+          - id: S2
+            type: Floor
+            name: EG
+            children:
+              - {id: S3, type: Room, name: Living}
+    programs: [{id: APP-1, number: 7, version: 2, mask: MV-0705, name: Switch app, source_loaded: true}]
+    components:
+      - id: P-1-0_DI-1
+        line: L1
+        address: 1
+        name: Wall Switch
+        in: [S3]
+        product: PR-1
+        program: APP-1
+        hardware2program_ref_id: HP-1
+        manufacturer_id: M-0001
+        product_text: Switch 4-fold
+        order_number: ORD-1
+        description: A description
+        comment: A comment
+        serial_number: SN-1
+        last_modified: "2026-01-01T00:00:00Z"
+      - {id: P-1-0_DI-2, individual_address: "1.1.2", program: APP-MISSING, in: []}
+      - {id: P-1-0_DI-3, line: L1, address: 3, name: Wall Dimmer, in: [S3]}
+    objects:
+      - {component: P-1-0_DI-1, ref: O-0_R-1, number: 0, text: Switch, function_text: Func, instance_text: Inst, flags: tx, dpt: [DPST-1-1], links: [G2, G1]}
+      - {component: P-1-0_DI-1, ref: O-1_R-2, number: 1, text: Status, flags: rx, dpt: [DPST-1-1], links: [G1]}
+      - {component: P-1-0_DI-2, ref: O-0_R-1, number: 0, resolved: false}
+    group_addresses:
+      - {id: G1, address: "1/0/1", name: Light, dpt: DPST-1-1}
+      - {id: G2, address: "1/0/2", name: Dim, dpt: DPST-5-1}
+    parameters:
+      - {component: P-1-0_DI-1, ref: P-2_R-2, name: Mode, text: Operating mode, value: "7", type: PT-2}
+      - {component: P-1-0_DI-1, ref: P-1_R-1, name: Delay, text: Delay time, value: "5", type: PT-1}
+
+  no_locations:
+    areas: [{id: A1, address: 1, name: Area One}]
+    lines: [{id: L1, area: A1, address: 1, name: Line One}]
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: One}
+      - {id: P-1-0_DI-2, line: L1, address: 2, name: Two}
+
+  unresolved_parameters:
+    areas: [{id: A1, address: 1, name: Area One}]
+    lines: [{id: L1, area: A1, address: 1, name: Line One}]
+    spaces: [{id: S1, type: Room, name: Room}]
+    components:
+      - {id: P-1-0_DI-1, line: L1, address: 1, name: One, in: [S1]}
+    parameters:
+      - {component: P-1-0_DI-1, ref: P-1_R-1, value: "1", resolved: false}
+      - {component: P-1-0_DI-1, ref: P-2_R-2, value: "2", resolved: false}
+      - {component: P-1-0_DI-1, ref: P-3_R-3, name: Known, value: "3"}
+
+cases:
+  - id: component_with_everything
+    graph: detail
+    component: P-1-0_DI-1
+    keys:
+      SUMMARY: [identity, derived]
+      MEDIUM: [identity, derived, topology, component_parameters]
+      FULL: [identity, derived, topology, component_parameters, group_addresses, communication_objects, product, application, engineering_metadata]
+    absent:
+      SUMMARY: [topology, component_parameters, communication_objects, match_kinds, derived.typing_rule_id]
+      MEDIUM: [communication_objects, group_addresses, product, application, engineering_metadata, match_kinds, derived.typing_rule_id, derived.typing_basis, component_parameters.0.parameter_type_id]
+      FULL: [match_kinds]
+    SUMMARY:
+      identity:
+        name: Wall Switch
+        individual_address: "1.1.1"
+        ets_id: P-1-0_DI-1
+        instance_path: House/EG/Living/Wall Switch
+        other_instance_paths: []
+      derived: {fact_kind: DERIVED, component_type: CONTROLLER}
+    MEDIUM:
+      identity: {instance_path: House/EG/Living/Wall Switch}
+      derived: {fact_kind: DERIVED, component_type: CONTROLLER}
+      topology:
+        area: {ets_id: A1, address: 1, name: Area One}
+        line: {ets_id: L1, address: 1, address_text: "1.1", name: Line One}
+        location_path:
+          - {ets_id: S1, name: House, space_type: Building}
+          - {ets_id: S2, name: EG, space_type: Floor}
+          - {ets_id: S3, name: Living, space_type: Room}
+      component_parameters:
+        - {parameter_ref_id: P-1_R-1, name: Delay, text: Delay time, value: "5", definition_resolved: true}
+        - {parameter_ref_id: P-2_R-2, name: Mode, text: Operating mode, value: "7", definition_resolved: true}
+    FULL:
+      derived:
+        fact_kind: DERIVED
+        component_type: CONTROLLER
+        typing_rule_id: CT4_DIRECTION
+        typing_basis: {receive_object_count: 1, transmit_object_count: 1, object_count: 2, datapoint_main_types: ["1"]}
+      component_parameters:
+        - {parameter_ref_id: P-1_R-1, parameter_type_id: PT-1}
+        - {parameter_ref_id: P-2_R-2, parameter_type_id: PT-2}
+      group_addresses:
+        - {ets_id: G1, address: "1/0/1", name: Light, datapoint_type: DPST-1-1}
+        - {ets_id: G2, address: "1/0/2", name: Dim, datapoint_type: DPST-5-1}
+      communication_objects:
+        - ets_id: P-1-0_DI-1/co/O-0_R-1
+          ref_id: O-0_R-1
+          object_number: 0
+          label: Inst
+          function_text: Func
+          text: Switch
+          instance_text: Inst
+          flags: {read: Disabled, write: Disabled, communication: Enabled, transmit: Enabled, update: Disabled, read_on_init: Disabled}
+          datapoint_types: [DPST-1-1]
+          definition_resolved: true
+          group_addresses:
+            - {ets_id: G2, address: "1/0/2", link_order: 0}
+            - {ets_id: G1, address: "1/0/1", link_order: 1}
+        - ets_id: P-1-0_DI-1/co/O-1_R-2
+          label: Status
+          flags: {transmit: Disabled, write: Enabled}
+          group_addresses: [{ets_id: G1, link_order: 0}]
+      product: {product_ref_id: PR-1, product_text: Switch 4-fold, order_number: ORD-1, manufacturer_id: M-0001, hardware2program_ref_id: HP-1}
+      application: {application_program_id: APP-1, application_number: 7, application_version: 2, mask_version: MV-0705, name: Switch app, source_loaded: true}
+      engineering_metadata:
+        description: A description
+        comment: A comment
+        serial_number: SN-1
+        has_ip_config: false
+        last_modified: "2026-01-01T00:00:00Z"
+        load_state: {application_program_loaded: null}
+
+  - id: component_without_area_line_location_program_parameters_and_with_unresolved_object
+    graph: detail
+    component: P-1-0_DI-2
+    keys:
+      SUMMARY: [identity, derived]
+      MEDIUM: [identity, derived, topology, component_parameters]
+      FULL: [identity, derived, topology, component_parameters, group_addresses, communication_objects, product, application, engineering_metadata]
+    absent:
+      SUMMARY: [topology]
+      MEDIUM: [communication_objects]
+      FULL: []
+    SUMMARY:
+      identity: {name: null, individual_address: "1.1.2", ets_id: P-1-0_DI-2, instance_path: null, other_instance_paths: []}
+      derived: {component_type: UNTYPED}
+    MEDIUM:
+      topology: {area: null, line: null, location_path: []}
+      component_parameters: []
+    FULL:
+      derived: {typing_rule_id: CT3_NO_OBJECTS}
+      group_addresses: []
+      communication_objects:
+        - ets_id: P-1-0_DI-2/co/O-0_R-1
+          definition_resolved: false
+          flags: {read: null, write: null, communication: null, transmit: null, update: null, read_on_init: null}
+          datapoint_types: []
+          group_addresses: []
+      application: {application_program_id: APP-MISSING, application_number: null, application_version: null, mask_version: null, name: null, source_loaded: null}
+      product: {product_ref_id: null}
+
+  - id: match_kinds_present_only_when_a_selector_was_given
+    graph: detail
+    component: P-1-0_DI-3
+    match_kinds: [NAME]
+    keys:
+      SUMMARY: [identity, derived, match_kinds]
+      MEDIUM: [identity, derived, topology, component_parameters, match_kinds]
+      FULL: [identity, derived, topology, component_parameters, group_addresses, communication_objects, product, application, engineering_metadata, match_kinds]
+    absent:
+      SUMMARY: [topology]
+      MEDIUM: [communication_objects]
+      FULL: []
+    SUMMARY:
+      identity: {name: Wall Dimmer, individual_address: "1.1.3"}
+      match_kinds: [NAME]
+
+notes_cases:
+  - {id: summary_all, graph: detail, level: SUMMARY, notes: ["Component type is a derived fact (coarse rule-based typing), not a project fact.", "1 returned components are not placed in a location and have no instance_path."]}
+  - id: medium_all
+    graph: detail
+    level: MEDIUM
+    notes:
+      - "Component type is a derived fact (coarse rule-based typing), not a project fact."
+      - "Parameter values are raw ETS strings; they are not interpreted through parameter types."
+      - "0 parameters and 1 communication objects of the returned components have unresolved definitions (see the import warnings)."
+      - "1 returned components are not placed in a location and have no instance_path."
+  - id: full_all_same_as_medium
+    graph: detail
+    level: FULL
+    notes:
+      - "Component type is a derived fact (coarse rule-based typing), not a project fact."
+      - "Parameter values are raw ETS strings; they are not interpreted through parameter types."
+      - "0 parameters and 1 communication objects of the returned components have unresolved definitions (see the import warnings)."
+      - "1 returned components are not placed in a location and have no instance_path."
+  - id: only_the_component_with_parameters
+    graph: detail
+    level: MEDIUM
+    selector: P-1-0_DI-1
+    notes:
+      - "Component type is a derived fact (coarse rule-based typing), not a project fact."
+      - "Parameter values are raw ETS strings; they are not interpreted through parameter types."
+  - id: only_a_component_without_parameters
+    graph: detail
+    level: FULL
+    selector: P-1-0_DI-3
+    notes: ["Component type is a derived fact (coarse rule-based typing), not a project fact."]
+  - id: empty_result_keeps_the_always_note
+    graph: detail
+    level: FULL
+    selector: nothing-like-this
+    notes: ["Component type is a derived fact (coarse rule-based typing), not a project fact."]
+  - id: project_without_locations
+    graph: no_locations
+    level: SUMMARY
+    notes:
+      - "Component type is a derived fact (coarse rule-based typing), not a project fact."
+      - "2 returned components are not placed in a location and have no instance_path."
+      - "The project encodes no locations; instance_path is absent for all components."
+  - id: unresolved_parameters_are_counted
+    graph: unresolved_parameters
+    level: MEDIUM
+    notes:
+      - "Component type is a derived fact (coarse rule-based typing), not a project fact."
+      - "Parameter values are raw ETS strings; they are not interpreted through parameter types."
+      - "2 parameters and 0 communication objects of the returned components have unresolved definitions (see the import warnings)."

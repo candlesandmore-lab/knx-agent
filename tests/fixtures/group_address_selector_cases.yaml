@@ -1,0 +1,49 @@
+# Group address selector parsing (003 'trace_group_flow' request rules), story 05, T2. User-editable.
+# A value that is a VALID ADDRESS FORM for the project style is an exact address (address_raw), else a partial name.
+# Valid forms: 3-level a/b/c (a 0-31, b 0-7, c 0-255) always; TwoLevel a/b (a 0-31, b 0-2047); Free 0-65535.
+# raw(a/b/c) = a*2048 + b*256 + c; raw(a/b) = a*2048 + b.
+
+address_cases:
+  # -- ThreeLevel ----------------------------------------------------------------------------------
+  - {id: three_valid, style: ThreeLevel, value: "5/0/12", address_raw: 10252}
+  - {id: three_valid_other, style: ThreeLevel, value: "1/2/3", address_raw: 2563}
+  - {id: three_min, style: ThreeLevel, value: "0/0/0", address_raw: 0}
+  - {id: three_max, style: ThreeLevel, value: "31/7/255", address_raw: 65535}
+  - {id: three_surrounding_space_stripped, style: ThreeLevel, value: "  5/0/12  ", address_raw: 10252}
+  - {id: three_leading_zeros, style: ThreeLevel, value: "05/00/012", address_raw: 10252}
+  - {id: three_two_level_form_is_a_name, style: ThreeLevel, value: "5/12", name: "5/12"}
+  - {id: three_plain_integer_is_a_name, style: ThreeLevel, value: "12", name: "12"}
+  - {id: three_main_out_of_range_is_a_name, style: ThreeLevel, value: "32/0/0", name: "32/0/0"}
+  - {id: three_middle_out_of_range_is_a_name, style: ThreeLevel, value: "0/8/0", name: "0/8/0"}
+  - {id: three_sub_out_of_range_is_a_name, style: ThreeLevel, value: "0/0/256", name: "0/0/256"}
+  - {id: three_word_is_a_name_casefolded, style: ThreeLevel, value: "Living Room", name: "living room"}
+  - {id: three_four_parts_is_a_name, style: ThreeLevel, value: "1/2/3/4", name: "1/2/3/4"}
+  # -- TwoLevel ------------------------------------------------------------------------------------
+  - {id: two_valid, style: TwoLevel, value: "5/12", address_raw: 10252}
+  - {id: two_max_sub, style: TwoLevel, value: "31/2047", address_raw: 65535}
+  - {id: two_sub_out_of_range_is_a_name, style: TwoLevel, value: "5/2048", name: "5/2048"}
+  - {id: two_main_out_of_range_is_a_name, style: TwoLevel, value: "32/0", name: "32/0"}
+  - {id: two_three_level_form_is_still_valid, style: TwoLevel, value: "5/0/12", address_raw: 10252}
+  - {id: two_plain_integer_is_a_name, style: TwoLevel, value: "300", name: "300"}
+  # -- Free ----------------------------------------------------------------------------------------
+  - {id: free_valid, style: Free, value: "300", address_raw: 300}
+  - {id: free_max, style: Free, value: "65535", address_raw: 65535}
+  - {id: free_out_of_range_is_a_name, style: Free, value: "65536", name: "65536"}
+  - {id: free_three_level_form_is_still_valid, style: Free, value: "1/2/3", address_raw: 2563}
+  - {id: free_two_level_form_is_a_name, style: Free, value: "5/12", name: "5/12"}
+  # -- style unknown behaves like ThreeLevel --------------------------------------------------------
+  - {id: no_style_three_level_valid, style: null, value: "5/0/12", address_raw: 10252}
+  - {id: no_style_plain_integer_is_a_name, style: null, value: "300", name: "300"}
+  # -- blank ---------------------------------------------------------------------------------------
+  - {id: blank, style: ThreeLevel, value: "   ", error: {code: INVALID_REQUEST, reason: SELECTOR_BLANK}}
+  - {id: empty, style: ThreeLevel, value: "", error: {code: INVALID_REQUEST, reason: SELECTOR_BLANK}}
+
+object_ref_cases:
+  - {id: valid, value: "P-1-0_DI-1/co/O-0_R-1", expected: "P-1-0_DI-1/co/O-0_R-1"}
+  - {id: valid_stripped, value: "  P-1-0_DI-1/co/O-0_R-1 ", expected: "P-1-0_DI-1/co/O-0_R-1"}
+  - {id: valid_with_collision_suffix, value: "P-1-0_DI-1~2/co/O-0_R-1", expected: "P-1-0_DI-1~2/co/O-0_R-1"}
+  - {id: well_formed_but_unknown_is_not_a_syntax_error, value: "X/co/Y", expected: "X/co/Y"}
+  - {id: without_marker, value: "O-0_R-1", error: {code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH}}
+  - {id: component_id_only, value: "P-1-0_DI-1", error: {code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH}}
+  - {id: blank, value: "  ", error: {code: INVALID_REQUEST, reason: SELECTOR_BLANK}}
+  - {id: empty, value: "", error: {code: INVALID_REQUEST, reason: SELECTOR_BLANK}}

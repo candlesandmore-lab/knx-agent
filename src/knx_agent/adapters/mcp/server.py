@@ -13,9 +13,13 @@ from mcp.server.mcpserver import MCPServer
 
 from knx_agent.contracts import (
     CreateSessionResponse,
+    DescribeComponentResponse,
     DescribeSessionResponse,
     KnxAgentError,
+    ListComponentsResponse,
     ReimportSystemDefinitionResponse,
+    SummarizeTopologyResponse,
+    TraceGroupFlowResponse,
 )
 from knx_agent.sdk import KnxSessionClient, configure_stderr_logging
 
@@ -33,8 +37,9 @@ def _call(fn, **kwargs):  # noqa: ANN001, ANN003
     try:
         return fn(**kwargs)
     except KnxAgentError as exc:
-        # Map to the MCP error mechanism unchanged: code and message in the error text.
-        raise ValueError(f"{exc.error.code}: {exc.error.message}") from exc
+        # Map to the MCP error mechanism unchanged: "CODE: message" on the first line, the ErrorInfo JSON (with
+        # details such as details.reason) on the second line, identical to the CLI error JSON.
+        raise ValueError(f"{exc.error.code}: {exc.error.message}\n{exc.error.model_dump_json()}") from exc
 
 
 @server.tool(name="create_session")
@@ -53,6 +58,78 @@ def describe_session(session_label: str) -> DescribeSessionResponse:
 def reimport_system_definition(session_label: str) -> ReimportSystemDefinitionResponse:
     """Re-read the bound .knxproj of the session identified by session_label."""
     return _call(_client().reimport_system_definition, session_label=session_label)
+
+
+# The query tools take plain strings (not enums) so that invalid values reach the core and return the catalogue
+# error code. log_level is the server startup argument (C6), not a tool argument.
+@server.tool(name="list_components")
+def list_components(
+    session_label: str,
+    component_selector: str | None = None,
+    selector_kind: str | None = None,
+    detail_level: str | None = None,
+    mutation_name: str | None = None,
+) -> ListComponentsResponse:
+    """List components by selector (name, instance path, individual address, ETS id), or all; empty set if none."""
+    return _call(
+        _client().list_components,
+        session_label=session_label,
+        component_selector=component_selector,
+        selector_kind=selector_kind,
+        detail_level=detail_level,
+        mutation_name=mutation_name,
+    )
+
+
+@server.tool(name="describe_component")
+def describe_component(
+    session_label: str,
+    component_selector: str,
+    selector_kind: str | None = None,
+    detail_level: str | None = None,
+    mutation_name: str | None = None,
+) -> DescribeComponentResponse:
+    """Describe the components matching a selector; SELECTOR_UNRESOLVED when nothing matches."""
+    return _call(
+        _client().describe_component,
+        session_label=session_label,
+        component_selector=component_selector,
+        selector_kind=selector_kind,
+        detail_level=detail_level,
+        mutation_name=mutation_name,
+    )
+
+
+@server.tool(name="summarize_topology")
+def summarize_topology(
+    session_label: str, detail_level: str | None = None, mutation_name: str | None = None
+) -> SummarizeTopologyResponse:
+    """Summarize areas, lines, locations and the component distribution."""
+    return _call(
+        _client().summarize_topology,
+        session_label=session_label,
+        detail_level=detail_level,
+        mutation_name=mutation_name,
+    )
+
+
+@server.tool(name="trace_group_flow")
+def trace_group_flow(
+    session_label: str,
+    group_address_selector: str | None = None,
+    communication_object_ref: str | None = None,
+    detail_level: str | None = None,
+    mutation_name: str | None = None,
+) -> TraceGroupFlowResponse:
+    """Trace the direct participants of a group address or communication object (exactly one selector)."""
+    return _call(
+        _client().trace_group_flow,
+        session_label=session_label,
+        group_address_selector=group_address_selector,
+        communication_object_ref=communication_object_ref,
+        detail_level=detail_level,
+        mutation_name=mutation_name,
+    )
 
 
 def parse_startup_arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:

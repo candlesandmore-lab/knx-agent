@@ -1,27 +1,31 @@
 # knx-agent
 
-knx-agent is a KNX investigation platform built around one shared core API. The same capabilities are exposed through a Python SDK, a Typer CLI and an MCP tool server (MCPServer, from mcp 2.x, formerly FastMCP). The adapters only delegate to the SDK, which calls the application layer. Implemented capabilities: `create_session`, `describe_session` and `reimport_system_definition` (the session service, story 03) with a real ETS 6 `.knxproj` import and project graph (story 04). The query capabilities on the graph (`summarize_topology`, `list_components`, ...) follow in todo 15.
+knx-agent is a KNX investigation platform built around one shared core API. The same capabilities are exposed through a Python SDK, a Typer CLI and an MCP tool server (MCPServer, from mcp 2.x, formerly FastMCP). The adapters only delegate to the SDK, which calls the application layer. Implemented capabilities: `create_session`, `describe_session` and `reimport_system_definition` (the session service, story 03) with a real ETS 6 `.knxproj` import and project graph (story 04), and the four read-only component inspection capabilities `list_components`, `describe_component`, `summarize_topology` and `trace_group_flow` (story 05, CLI group `knx-agent setup`).
 
 ## Package layout
 
 ```
 src/knx_agent/
   contracts/     request/response models, response envelope, error types and codes, LogLevel
-  domain/        session-state model, project graph model, component typing, graph diff (pure)
-  application/   SessionService = SessionLifecycle + ProjectRefreshGuard; importer (archive guard, ETS 6 parser,
-                 derivation, fingerprint), graph store, log book writer
+  domain/        session-state model, project graph model, component typing, graph diff, and the query logic of
+                 story 05: graph_index, selectors, component_view, topology_summary, group_flow (pure)
+  application/   SessionService = SessionLifecycle + ProjectRefreshGuard; QueryService (the four query
+                 capabilities); importer (archive guard, ETS 6 parser, derivation, fingerprint), graph store,
+                 log book writer, shared ERROR reporting
   sdk/           KnxSessionClient, the Python entry point
-  cli/           Typer CLI adapter (`knx-agent session create|describe|reimport`)
+  cli/           Typer CLI adapter (`knx-agent session create|describe|reimport`,
+                 `knx-agent setup list-components|describe-component|summarize-topology|trace-group-flow`)
   adapters/mcp/  MCP adapter (MCPServer, mcp 2.x), console script `knx-agent-mcp`
   agent_layer/   agent-facing layer (placeholder)
 tests/
   conftest.py    YAML fixture loader, helpers, session test projects
   knxproj_builder.py  builder for small valid synthetic ETS 6 archives (and every error/warning variant)
+  graph_factory.py    builds a project graph from a compact YAML description (domain tests need no archive)
   fixtures/      user-editable test input data (YAML)
   lifedata/      the committed sample project (see "The sample project")
 ```
 
-Import direction: adapters (CLI, MCP) -> SDK -> application -> contracts/domain. This is enforced by `tests/test_import_direction.py`.
+Import direction: adapters (CLI, MCP) -> SDK -> application -> domain -> contracts (the domain may import `contracts`, which imports nothing). This is enforced by `tests/test_import_direction.py`.
 
 ## Install for development
 
@@ -128,6 +132,78 @@ One process works on a session at a time. Concurrent access to the same session 
 - Every failure is logged as ERROR through the standard Python `logging` module (logger `knx_agent` and children). The library installs no handler; the CLI and `knx-agent-mcp` attach a stderr handler. When the session exists, the ERROR is also appended to `session-log-book.jsonl` as level `ERROR`, whatever `log_level` is configured. A failed `create_session` is logged to the Python logger only.
 - Log book entries: `entry_id`, `timestamp`, `level`, `capability`, `setup`, `summary`, `details`.
 
+## Component inspection (story 05)
+
+Four read-only capabilities answer questions about the imported project graph. Every call first runs the project refresh check (a changed project is re-imported before the query), then validates the request, loads `project-graph.json`, indexes it and answers; nothing is cached between calls. Terms: a *location* is a space of the ETS location tree (Building, Floor, Room, ...); the *instance path* of a component is its location path plus its own name, joined by `/` (for example `House/Ground floor/Living room/Wall switch`); a component that is not placed in a location has no instance path.
+
+### Commands
+
+```
+knx-agent setup list-components --session house-1 [--query <selector>] [--selector-kind K] [--detail-level L] [--mutation M]
+knx-agent setup describe-component --session house-1 --component <selector> [--selector-kind K] [--detail-level L] [--mutation M]
+knx-agent setup summarize-topology --session house-1 [--detail-level L] [--mutation M]
+knx-agent setup trace-group-flow --session house-1 (--group-address <address or name> | --object-ref <ref>) [--detail-level L] [--mutation M]
+```
+
+All four also take `--session-root <dir>` and `--log-level INFO|DEBUG|FULL`. All values are plain strings validated by the core (a bad `--detail-level` is the catalogue error `INVALID_DETAIL_LEVEL`, not a usage error). Examples with generic names:
+
+```
+knx-agent setup list-components --session house-1 --query 1.1.5
+knx-agent setup list-components --session house-1 --query "Ground floor/Living room/" --detail-level SUMMARY
+knx-agent setup list-components --session house-1 --query "switch" --selector-kind NAME
+knx-agent setup describe-component --session house-1 --component P-0001-0_DI-6 --detail-level FULL
+knx-agent setup summarize-topology --session house-1 --detail-level MEDIUM
+knx-agent setup trace-group-flow --session house-1 --group-address 5/0/12
+knx-agent setup trace-group-flow --session house-1 --object-ref "P-0001-0_DI-6/co/O-0_R-1"
+```
+
+SDK: `client.list_components(session_label, component_selector=None, selector_kind=None, detail_level=None, mutation_name=None, log_level=None)`, `describe_component(...)` (same parameters), `summarize_topology(session_label, detail_level=None, mutation_name=None, log_level=None)` and `trace_group_flow(session_label, group_address_selector=None, communication_object_ref=None, detail_level=None, mutation_name=None, log_level=None)`; strings or the enums `SelectorKind` / `DetailLevel` are accepted, case-insensitively. MCP tools of the same names take `session_label`, `component_selector`, `selector_kind`, `group_address_selector`, `communication_object_ref`, `detail_level` and `mutation_name` as strings; the log level is the server startup argument. An MCP error is a `ValueError` whose first line is `CODE: message` and whose second line is the `ErrorInfo` JSON (including `details.reason`), identical to the CLI error JSON.
+
+### Component selectors
+
+`selector_kind` is `ANY` (default, auto-detect), `NAME`, `INSTANCE_PATH`, `INDIVIDUAL_ADDRESS` or `ETS_ID`. The value is stripped; an empty value is `INVALID_REQUEST` (`details.reason` `SELECTOR_BLANK`).
+
+| Kind | Looks like | Matches |
+| --- | --- | --- |
+| `NAME` | any text | partial, case-insensitive substring of the component name (components without a name never match) |
+| `INSTANCE_PATH` | segments separated by `/` | partial, case-insensitive, per segment, over consecutive path segments (below) |
+| `INDIVIDUAL_ADDRESS` | `1.1.5` (area 0-15, line 0-15, device 0-255; leading zeros are accepted) | exact |
+| `ETS_ID` | `P-0001-0_DI-6` | exact, case-sensitive |
+
+Under `ANY` the name is always evaluated; an individual address or ETS id is evaluated when the value has that syntax; an instance path is evaluated only when the value contains `/`. The result is the union, each component once, and every match carries `match_kinds` (sorted, no duplicates): a component named `1.1.5` that also has that individual address matches with `["INDIVIDUAL_ADDRESS", "NAME"]`, and a value such as `1.1.300` (out of range) is only a name query. An explicit kind evaluates only that kind; a value that does not fit it (for example `INDIVIDUAL_ADDRESS` with `1.1`) is `INVALID_REQUEST` with `details.reason` `SELECTOR_KIND_MISMATCH`. An unknown kind is `SELECTOR_KIND_UNKNOWN`, a kind without a selector in `list_components` is `SELECTOR_KIND_WITHOUT_SELECTOR`.
+
+Instance path queries: the query is split at `/`; its segments must match consecutive path segments (each as a case-insensitive substring), so `Ground floor/Living room/Wall` matches and `House/Living room` does not (a floor lies between). A leading `/` anchors the first segment at the root (`/House/Ground/`); a trailing `/` makes it a location query that must match inside the location part (`Ground floor/Living room/` lists every component placed there, including in nested child locations). Segment texts: the node name; an empty space name uses the space id, an empty component name uses its individual address. Names containing `/` stay one segment.
+
+Results: `list_components` returns `matches`, `match_count` and `ambiguous` (a selector was given and more than one component matches; a broad listing is never ambiguous); no match is an empty set, not an error. `describe_component` returns the same set as `components`; nothing matching is `SELECTOR_UNRESOLVED` (`details.selector`, `selector_kind`, `evaluated_kinds`).
+
+### Detail levels
+
+`detail_level` is `SUMMARY`, `MEDIUM` (default) or `FULL`; the three levels are distinct, and fields of a higher level are absent (not `null`) at a lower one.
+
+| Block | SUMMARY | MEDIUM | FULL |
+| --- | --- | --- | --- |
+| `identity` (name, individual address, ETS id, `instance_path`, `other_instance_paths`) | yes | yes | yes |
+| `derived` (`fact_kind` `DERIVED`, `component_type`) | yes | yes | plus `typing_rule_id`, `typing_basis` |
+| `match_kinds` | with a selector | with a selector | with a selector |
+| `topology` (area, line, location path), `component_parameters` (raw ETS strings) | no | yes | yes (+ `parameter_type_id`) |
+| `group_addresses`, `communication_objects` (flags, datapoint types, linked group addresses), `product`, `application`, `engineering_metadata` | no | no | yes |
+
+Source facts and derived facts are kept apart: the component type lives only in `derived`. `summarize_topology` returns SUMMARY: counts of areas, lines and locations plus `locations_by_type`; MEDIUM adds areas with their lines and component counts, a depth-first location list (`path`, `depth`, direct and total counts) and the unplaced / unassigned counts; FULL adds the component names and individual addresses under every line and location. `component_counts` (total, placed, unplaced, by component type) is in every level. A project without locations gives a limitation note instead of location entries.
+
+### Group address flow and direction labels
+
+`trace_group_flow` takes exactly one of `group_address_selector` and `communication_object_ref` (both: `SELECTOR_CONFLICT`; none: `SELECTOR_MISSING`). A group address selector that is a valid address form is matched exactly: the 3-level form `a/b/c` (a 0-31, b 0-7, c 0-255) always, plus the form of the project's address style (TwoLevel `a/b`, Free a plain number); anything else is a partial, case-insensitive group address name (unnamed addresses never match). A name may match several group addresses: the result is a set (`ambiguous` true), ordered by address. `communication_object_ref` is the object id `<component id>/co/<ref id>` shown in `communication_objects[].ets_id`; the result has one entry per linked group address (an object without links gives an empty set and a note). Unknown address, name or object: `SELECTOR_UNRESOLVED`.
+
+Each entry lists the direct participants (the communication objects linked to the address and their components) with a direction label derived only from the ETS communication object flags: `SENDER` (transmit), `RECEIVER` (write or update), `SENDER_RECEIVER` (transmit and write/update) or `UNDETERMINED` (no such flag, a read-only object, or flags unknown because the definition is unresolved); `roles` list `TRANSMITS`, `ACCEPTS_WRITE`, `ACCEPTS_UPDATE` and `ANSWERS_READ`. Limits: the order of group address links is not used as a sender rule; there is no line or area routing; `current_value` is always `unknown`; `unresolved_links` come from the import warnings.
+
+### Read-only behaviour and errors
+
+The four capabilities write no log book entry of their own, at any `log_level`; only the refresh check writes (DEBUG when unchanged, INFO when it re-imported, with the calling capability name). The envelope `log_book_entry_id` is that refresh entry or `null`. Every failure is an ERROR entry (always written) plus a Python logging record. Order: log level, session, refresh check, request validation, graph load, query. `mutation_name` omitted, empty or `default` targets the default setup; any other value is `MUTATION_NOT_FOUND` until mutations exist. A stored `project-graph.json` that cannot be read is `PROJECT_PARSE_ERROR` with `details.reason` `GRAPH_FILE_INVALID` (repair it with `reimport_system_definition`).
+
+### Limitations
+
+No paging or result limit (a `FULL` listing of a whole project is large: narrow the selector or lower the level); component type is a coarse derived fact; parameter values are raw ETS strings; direction is flag based only; no routing and no simulated values (`current_value` is `unknown`); no purpose annotation (todo 14); a rejected request can still re-import a changed project (the refresh check comes first). Measured on the sample (28 components, 692 communication objects): every query call takes 0.02 to 0.04 s at every detail level; a `FULL` listing of all components is 1.25 MB of JSON.
+
 ## Test fixtures
 
 Test input data lives in YAML files, not in test modules. Tests use temporary session roots and small valid synthetic ETS 6 archives made by `tests/knxproj_builder.py` (a Python/YAML description plus named mutations for every error and warning case; only `zipfile` is used). The sample project is the real-world check.
@@ -147,12 +223,22 @@ Test input data lives in YAML files, not in test modules. Tests use temporary se
 | `tests/fixtures/stable_id_cases.yaml` | stable ID rules |
 | `tests/fixtures/zip_limit_cases.yaml` | lowered archive limits per case |
 | `tests/fixtures/sample_project_counts.yaml` | golden counts of the sample project |
+| `tests/fixtures/query_request_cases.yaml` | `detail_level` and `selector_kind` parsing |
+| `tests/fixtures/selector_cases.yaml`, `selector_overlap_cases.yaml` | component selectors on described graphs; the `ANY` overlap rules |
+| `tests/fixtures/group_address_selector_cases.yaml` | group address forms per address style, object refs |
+| `tests/fixtures/graph_index_cases.yaml` | component order, paths, memberships, warnings by object |
+| `tests/fixtures/component_detail_level_cases.yaml`, `describe_component_cases.yaml` | the three detail levels, limitation notes, list/describe results |
+| `tests/fixtures/topology_summary_cases.yaml` | topology summary per level |
+| `tests/fixtures/group_flow_cases.yaml` | flow entries, direction, link-order independence |
+| `tests/fixtures/query_error_cases.yaml`, `query_log_cases.yaml` | query failures and read-only logging |
+| `tests/fixtures/surface_cases.yaml` | SDK / CLI / MCP parity, option and argument names |
+| `tests/fixtures/sample_query_expectations.yaml` | golden structure of the sample for the query capabilities |
 
-To add a case, append an entry with a unique `id`; no Python change is needed.
+To add a case, append an entry with a unique `id`; no Python change is needed. Domain cases describe a graph in YAML (areas, lines, location tree, components, communication objects with flags and links, group addresses, parameters, warnings) that `tests/graph_factory.py` turns into a project graph, so they need no archive; service, SDK, CLI and MCP tests use archives from `tests/knxproj_builder.py`.
 
 ### Sample-based tests and skipping
 
-`tests/test_sample_project.py` and `tests/test_xknxproject_crosscheck.py` skip (with the reason in the report) when `tests/lifedata/20261010-EFH-Armbruster.knxproj` is absent; the cross-check also skips when `xknxproject` is not installed (`uv sync` installs it from the dev group). In CI, run with `-rs` to see the skip reasons. The cross-check compares our graph with xknxproject: individual addresses and group addresses are equal; xknxproject lists only communication objects that have a group address link (677 on the sample, ours: 692), so the test compares per component on our objects that have a membership.
+`tests/test_sample_project.py`, `tests/test_sample_queries.py` (golden structure of the four query capabilities: counts, ids and structure only, names are taken at run time) and `tests/test_xknxproject_crosscheck.py` skip (with the reason in the report) when `tests/lifedata/20261010-EFH-Armbruster.knxproj` is absent; the cross-check also skips when `xknxproject` is not installed (`uv sync` installs it from the dev group). In CI, run with `-rs` to see the skip reasons. The cross-check compares our graph with xknxproject: individual addresses and group addresses are equal; xknxproject lists only communication objects that have a group address link (677 on the sample, ours: 692), so the test compares per component on our objects that have a membership.
 
 ## Run the tests
 

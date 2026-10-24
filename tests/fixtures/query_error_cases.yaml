@@ -1,0 +1,43 @@
+# Failures of the four query capabilities (story 05, T6). User-editable.
+# Each case calls one capability on a session built from the default synthetic project and expects the error code,
+# optional details.reason and a details subset. Every failure writes exactly one ERROR log book entry (except
+# INVALID_LOG_LEVEL and SESSION_NOT_FOUND, which have no log book to write to before the session is opened).
+# Default synthetic project: components Sensor 1.1.1 (P-0001-0_DI-1), Controller 1.1.2, Actuator 1.1.3; group
+# addresses 0/0/1 Light, 0/0/2 Brightness, 0/0/3 Status.
+
+cases:
+  # -- describe_component -------------------------------------------------------------------------
+  - {id: describe_unresolved_name, method: describe_component, args: {component_selector: Nothing}, code: SELECTOR_UNRESOLVED, details: {selector: Nothing, selector_kind: ANY, evaluated_kinds: [NAME]}}
+  - {id: describe_unresolved_address, method: describe_component, args: {component_selector: "1.1.99"}, code: SELECTOR_UNRESOLVED, details: {selector: "1.1.99", selector_kind: ANY, evaluated_kinds: [INDIVIDUAL_ADDRESS, NAME]}}
+  - {id: describe_unresolved_explicit_kind, method: describe_component, args: {component_selector: P-0001-0_DI-99, selector_kind: ets_id}, code: SELECTOR_UNRESOLVED, details: {selector_kind: ETS_ID, evaluated_kinds: [ETS_ID]}}
+  - {id: describe_missing_selector, method: describe_component, args: {}, code: INVALID_REQUEST, reason: SELECTOR_MISSING}
+  - {id: describe_blank_selector, method: describe_component, args: {component_selector: "   "}, code: INVALID_REQUEST, reason: SELECTOR_BLANK}
+  - {id: describe_kind_mismatch, method: describe_component, args: {component_selector: "1.1", selector_kind: INDIVIDUAL_ADDRESS}, code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH, details: {selector_kind: INDIVIDUAL_ADDRESS, value: "1.1"}}
+  - {id: describe_unknown_kind, method: describe_component, args: {component_selector: x, selector_kind: ROOM}, code: INVALID_REQUEST, reason: SELECTOR_KIND_UNKNOWN}
+  - {id: describe_invalid_detail_level, method: describe_component, args: {component_selector: Sensor, detail_level: HUGE}, code: INVALID_DETAIL_LEVEL, details: {allowed: [SUMMARY, MEDIUM, FULL]}}
+  - {id: describe_mutation, method: describe_component, args: {component_selector: Sensor, mutation_name: night}, code: MUTATION_NOT_FOUND, details: {mutation_name: night}}
+  # -- list_components ----------------------------------------------------------------------------
+  - {id: list_blank_selector, method: list_components, args: {component_selector: ""}, code: INVALID_REQUEST, reason: SELECTOR_BLANK}
+  - {id: list_kind_without_selector, method: list_components, args: {selector_kind: NAME}, code: INVALID_REQUEST, reason: SELECTOR_KIND_WITHOUT_SELECTOR}
+  - {id: list_any_kind_without_selector, method: list_components, args: {selector_kind: ANY}, code: INVALID_REQUEST, reason: SELECTOR_KIND_WITHOUT_SELECTOR}
+  - {id: list_unknown_kind, method: list_components, args: {component_selector: x, selector_kind: nope}, code: INVALID_REQUEST, reason: SELECTOR_KIND_UNKNOWN, details: {allowed: [ANY, NAME, INSTANCE_PATH, INDIVIDUAL_ADDRESS, ETS_ID]}}
+  - {id: list_kind_mismatch, method: list_components, args: {component_selector: DI-1, selector_kind: ETS_ID}, code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH}
+  - {id: list_invalid_detail_level, method: list_components, args: {detail_level: all}, code: INVALID_DETAIL_LEVEL}
+  - {id: list_mutation, method: list_components, args: {mutation_name: x}, code: MUTATION_NOT_FOUND, details: {mutation_name: x}}
+  # -- summarize_topology --------------------------------------------------------------------------
+  - {id: topology_invalid_detail_level, method: summarize_topology, args: {detail_level: BRIEF}, code: INVALID_DETAIL_LEVEL}
+  - {id: topology_mutation, method: summarize_topology, args: {mutation_name: x}, code: MUTATION_NOT_FOUND}
+  # -- trace_group_flow ----------------------------------------------------------------------------
+  - {id: flow_conflict, method: trace_group_flow, args: {group_address_selector: "0/0/1", communication_object_ref: "P-0001-0_DI-1/co/O-0_R-1"}, code: INVALID_REQUEST, reason: SELECTOR_CONFLICT}
+  - {id: flow_missing, method: trace_group_flow, args: {}, code: INVALID_REQUEST, reason: SELECTOR_MISSING}
+  - {id: flow_blank_address, method: trace_group_flow, args: {group_address_selector: " "}, code: INVALID_REQUEST, reason: SELECTOR_BLANK}
+  - {id: flow_blank_object_ref, method: trace_group_flow, args: {communication_object_ref: ""}, code: INVALID_REQUEST, reason: SELECTOR_BLANK}
+  - {id: flow_object_ref_without_marker, method: trace_group_flow, args: {communication_object_ref: nope}, code: INVALID_REQUEST, reason: SELECTOR_KIND_MISMATCH}
+  - {id: flow_unresolved_name, method: trace_group_flow, args: {group_address_selector: zzz}, code: SELECTOR_UNRESOLVED, details: {selector: zzz, selector_kind: GROUP_ADDRESS, evaluated_kinds: [NAME]}}
+  - {id: flow_unresolved_address, method: trace_group_flow, args: {group_address_selector: "9/0/9"}, code: SELECTOR_UNRESOLVED, details: {evaluated_kinds: [ADDRESS], address_raw: 18441}}
+  - {id: flow_unresolved_object, method: trace_group_flow, args: {communication_object_ref: "P-0001-0_DI-1/co/O-9_R-9"}, code: SELECTOR_UNRESOLVED, details: {selector_kind: COMMUNICATION_OBJECT_REF}}
+  - {id: flow_invalid_detail_level, method: trace_group_flow, args: {group_address_selector: "0/0/1", detail_level: x}, code: INVALID_DETAIL_LEVEL}
+  - {id: flow_mutation, method: trace_group_flow, args: {group_address_selector: "0/0/1", mutation_name: x}, code: MUTATION_NOT_FOUND}
+  # -- log level (checked before the session is opened: Python logger only) --------------------------
+  - {id: list_invalid_log_level, method: list_components, args: {log_level: LOUD}, code: INVALID_LOG_LEVEL, no_log_book_entry: true}
+  - {id: flow_invalid_log_level, method: trace_group_flow, args: {group_address_selector: "0/0/1", log_level: LOUD}, code: INVALID_LOG_LEVEL, no_log_book_entry: true}
